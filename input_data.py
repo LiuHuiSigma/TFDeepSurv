@@ -94,7 +94,7 @@ class DataSet(object):
 			assert batch_size <= self._num_examples
 		end = self._index_in_epoch
 		# prepare sorted data
-		X_data_batch, labels_batch = prepare_data(start, end)
+		X_data_batch, labels_batch = self.prepare_data(start, end)
 		return X_data_batch, labels_batch
 
 def read_data_sets(train_dir, targets = ['T', 'E'], validation_ratio = 0.0):
@@ -115,3 +115,4 @@ def read_data_sets(train_dir, targets = ['T', 'E'], validation_ratio = 0.0):
 		data_sets.validation = DataSet(local_validation[x_cols], local_validation[targets])
 	data_sets.train = DataSet(local_train[x_cols], local_train[targets])
 	data_sets.test = DataSet(local_test[x_cols], local_test[targets])
+	return data_sets

@@ -12,20 +12,17 @@ def prepare_data(data):
     e = e[sort_idx]
     t = t[sort_idx]
 
-    print 'Censored data= ', 1- np.mean(e), '%'
-
     return x, e, t
 
-def decode_ET(y_data):
-    if isinstance(y_data, dict):
-       e, t = data_y['e'], data_y['t']
+def decode_ET(data_y):
+    e, t = data_y['e'], data_y['t']
 
     failures = {}
     atrisk = {}
 
-    n, cnt = 0, 0
-    for i in range(e.shape[0]):
-        if e[i]:
+    n, cnt, i = 0, 0, 0
+    for ei in e:
+        if ei:
             if t[i] not in failures:
                 failures[t[i]] = [i]
                 n += 1
@@ -40,7 +37,7 @@ def decode_ET(y_data):
                     atrisk[t[i]].append(i-j-1)
             else:
                 atrisk[t[i]].append(i)
-
+        i += 1
     # when ties occured frequently
     if cnt >= n / 2:
         ties = 'efron'
@@ -102,7 +99,7 @@ def readData(file0, file1, discount):
     }
 
     #train_data['x'] -= np.mean(train_data['x'], axis=0)
-    print 'train t=1: min-', min(t1), ' max-', max(t1), ' mean-', np.mean(t1)
+    # print 'train t=1: min-', min(t1), ' max-', max(t1), ' mean-', np.mean(t1)
 
     # generate test data
     x0 = data0.values[testidx0, 0:FEATURE_NUM]
@@ -128,7 +125,5 @@ def readData(file0, file1, discount):
         'e': e.astype(np.int8)
     }
     #test_data['x'] -= np.mean(test_data['x'], axis=0)
-    print 'test t=1: min-', min(t1), ' max-', max(t1), ' mean-', np.mean(t1)
+    # print 'test t=1: min-', min(t1), ' max-', max(t1), ' mean-', np.mean(t1)
     return (train_data, test_data, names)
-
-

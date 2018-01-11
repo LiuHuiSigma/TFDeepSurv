@@ -1,164 +1,121 @@
 from __future__ import print_function
 import numpy as np
-import keras
-import theano.tensor as T
-from input_data import read_data_sets
+import tensorflow as tf
 from lifelines.utils import concordance_index
 import utils
 
+
 class LDeepSurv(object):
-	def __init__(self, input_shape, learning_rate = 0.001, 
-        L2_reg = 0.0, L1_reg = 0.0, optimizer = 'adam', 
-        hidden_layer_sizes = None, activation = 'relu', 
-        batch_norm = False, dropout = 0.0, standardize = False):
-        """
-        This class implements and trains a DeepSurv model.
-        Parameters:
-            input_shape: shape of input. like (None, n)
-            learning_rate: learning rate for training.
-            L2_reg: coefficient for L2 weight decay regularization. Used to help
-                prevent the model from overfitting.
-            L1_reg: coefficient for L1 weight decay regularization
-            optimizer: optimizer for backpropogation
-            hidden_layer_sizes: a list of integers to determine the size of
-                each hidden layer.
-            activation: activation name from keras.
-                Default: 'relu'
-            batch_norm: True or False. Include batch normalization layers.
-            dropout: if 0.0, the percentage of dropout to include
-                after each hidden layer. Default: 0.0
-            standardize: True or False. Include standardization layer after
-                input layer.
-        """
-        X_input = keras.layers.Input(shape = input_shape, dtype = "float32", name = 'Input')
-        X = X_input
-
-        for n_layer in hidden_layer_sizes:
-            # weight initialization methods for different activations
-            if activation == 'relu':
-                W_init = 'glorot_uniform'
-            else:
-                # TODO:
-                W_init = 'glorot_uniform'
-
-            # Z = w * x + b
-            # weight initialize and regularize
-            Z = keras.layers.Dense(units = n_layer, 
-                                   kernel_initializer = W_init,
-                                   kernel_regularize = keras.regularizers.l1_l2(L1_reg, L2_reg))(X)
-
-            # batch Norm should be added before Activation
-            # the advantages of BatchNorm
-            if batch_norm:
-                Z = keras.layers.BatchNormalization()(Z)
-
-            # activation function
-            A = keras.layers.Activation(activation)(Z)
-
-            # Dropout
-            if dropout != .0:
-                A = keras.layers.Dropout(dropout)(A)
-
-            X = A
-
-        # output
-        output = keras.layer.Dense(units = 1,
-                                   kernel_initializer = 'glorot_uniform',
-                                   kernel_regularize = keras.regularizers.l1_l2(L1_reg, L2_reg))(X)
-
-        # model
-        self.model = keras.models.Model(inputs = X_input, outputs = output, name = 'LDeepSurv')
-        
-        # optimizer
-        if optimizer == 'adam':
-            opt = keras.optimizers.Adam()
-        elif optimizer == 'sgd':
-            opt = keras.optimizers.SGD(lr = learning_rate, momentum = 0.9, decay = 0.0, nesterov = False)
-        else:
-            opt = keras.optimizers.Adam()
-
-        self.model.compile(optimizer = opt, loss = self._negative_log_likelihood, metrics = [self._CI])
-
-        # Store and set needed Hyper-parameters for tuning
-        self.hyperparams = {
+    def __init__(self, input_node, hidden_layers_node, output_node 
+        learning_rate = 0.001, learning_rate_decay = 0.0, 
+        activation = 'relu', 
+        L2_reg = 0.0, L1_reg = 0.0, optimizer = 'sgd', 
+        dropout = 0.0):
+        # Data input 
+        self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
+        self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
+        # hidden layers
+        prev_node = input_node
+        prev_x = self.X
+        for i in range(len(hidden_layers_node)):
+            with tf.variable_scope('layer' + str(i+1)):
+                weights = self.get_weight_variable([prev_node, hidden_layers_node[i]], L1_reg, L2_reg)
+                biases = tf.get_variable('biases', [hidden_layers_node[i]],
+                                         initializer=tf.constant_initializer(0.0))
+                if activation == 'relu':
+                    layer_out = tf.nn.relu(tf.matmul(prev_x, weights) + biases)
+                elif activation == 'sigmoid':
+                    layer_out = tf.nn.sigmoid(tf.matmul(prev_x, weights) + biases)
+                elif activation == 'tanh':
+                    layer_out = tf.nn.tanh(tf.matmul(prev_x, weights) + biases)
+                else:
+                    layer_out = tf.nn.relu(tf.matmul(prev_x, weights) + biases)
+                prev_node = hidden_layers_node[i]
+                prev_x = layer_out
+        # output layers
+        with tf.variable_scope('layer_last'):
+            weights = self.get_weight_variable([prev_node, output_node], L1_reg, L2_reg)
+            biases = tf.get_variable('biases', [output_node],
+                                     initializer=tf.constant_initializer(0.0))
+            layer_out = tf.matmul(prev_x, weights) + biases
+        self.y = layer_out
+        self.configuration = {
+            'input_node': input_node,
+            'hidden_layers_node': hidden_layers_node,
+            'output_node': output_node,
             'learning_rate': learning_rate,
-            'hidden_layers_sizes': hidden_layers_sizes,
-            'optimizer': optimizer,
-            'L2_reg': L2_reg,
-            'L1_reg': L1_reg,
+            'learning_rate_decay': learning_rate_decay,
             'activation': activation,
-            'dropout': dropout,
-            'batch_norm': batch_norm,
-            'standardize': standardize
+            'L1_reg': L1_reg,
+            'L2_reg': L2_reg,
+            'optimizer': optimizer,
+            'dropout': dropout
         }
 
-        # Store needed parameters for training or others
-        self.input_shape = input_shape
-        self.learning_rate = learning_rate
-        self.standardize = standardize
-        self.restored_update_params = None
+    def train(X, label, num_epoch=1000):
+        """
+        train DeepSurv network
+        Parameters:
+            X: np.array[N, m]
+            label: np.array[N, 2]
+                   E: [:, 0]
+                   T: [:, 1]
+        """
+        global_step = tf.Variable(0, trainabel=False)
+        # Batch contain all train dataset
+        learning_rate = tf.train.exponential_decay(
+                self.configuration['learning_rate'],
+                global_step,
+                1,
+                self.configuration['learning_rate_decay']
+            )
+        # loss value
+        loss_fun = self._negative_log_likelihood(self.y_, self.y)
+        loss = loss_fun + tf.add_n(tf.get_collection('losses'))
+        # SGD Optimizer
+        train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
+        # train
+        n = label.shape[0]
+        with tf.Session() as sess:
+            init_op = tf.initialize_global_variables()
+            sess.run(init_op)
+            for i in range(num_epoch):
+                _, output_y, loss_value, step = sess.run([train_step, self.y, loss, global_step],
+                                               feed_dict = {self.X: X, self.y_: label[:, 0].reshape((n, 1))})
+                if i % 20 == 0:
+                    print("-------------------------------------------------")
+                    print("training steps %d: loss=%g.\n", step, loss_value)
+                    print("CI on train set: %g.\n", self._Metrics_CI(label, output_y))
+
+    def get_weight_variable(self, shape, L1_reg, L2_reg):
+        weights = tf.get_variable('weights', shape, 
+                                  initializer=tf.truncated_normal_initializer(stddev=0.1))
+        if L1_reg != 0.0:
+            tf.add_to_collection('losses', tf.contrib.layers.l1_regularizer(L1_reg))
+
+        if L2_reg != 0.0:
+            tf.add_to_collection('losses', tf.contrib.layers.l2_regularizer(L2_reg))
+        return weights
 
     def _negative_log_likelihood(self, y_true, y_pred):
         """
         Callable loss function for DeepSurv network.
-
-        Parameters:
-            y_true: labels(dict like {'E': ,'T': }) for input_X.
-            y_pred: outputs of the network for input_X.
-
-        Returns:
-            loss value formatted as theano expression.
         """
-        # get information from labels for next calculation.
-        (ties, E, T, failures, atrisk) = utils.decode_ET(y_true)
-        logL = 0
-        if ties == 'noties':
-            hazard_ratio = T.exp(y_pred)
-            log_risk = T.log(T.extra_ops.cumsum(hazard_ratio))
-            likelihood = y_pred.T - log_risk
-            uncensored_likelihood = likelihood * E
-            logL = -T.sum(uncensored_likelihood)
-        else:
-            for t in failures:
-                tfail = failures[t]
-                trisk = atrisk[t]
-                d = len(tfail)
-
-                logL += -T.sum(y_pred[tfail])
-
-                if ties == 'breslow':
-                    s = T.sum(T.exp(y_pred[trisk]))
-                    logL += T.log(s)*d
-                elif ties == 'efron':
-                    s = T.sum(T.exp(y_pred[trisk]))
-                    r = T.sum(T.exp(y_pred[tfail]))
-                    for j in range(d):
-                        logL += T.log(s - j * r / d)
-                else:
-                    raise NotImplementedError('tie breaking method not recognized')
-
+        hazard_ratio = tf.exp(y_pred)
+        log_risk = tf.log(tf.cumsum(hazard_ratio))
+        likelihood = y_pred - log_risk
+        # dimension for E: np.array -> [None, 1]
+        uncensored_likelihood = likelihood * y_true
+        logL = -tf.reduce_sum(uncensored_likelihood)
         return logL
     
-    def _CI(self, y_true, y_pred):
+    def _Metrics_CI(self, label_true, y_pred):
         """
         Compute the concordance-index value.
-        Parameters:
-            y_true: labels(dict like {'e': ,'t': }) for input_X.
-            y_pred: outputs of the network for input_X.
-
-        Returns:
-            concordance index.
         """
+        n = label_true.shape[0]
         hr_pred = -np.exp(y_pred)
-        ci = concordance_index(y_true['t'], hr_pred, y_true['e'])
+        ci = concordance_index(label_true[:, 1].reshape((n, 1)),
+                               hr_pred,
+                               label_true[:, 0].reshape((n, 1)))
         return ci
-
-    def train(self, data_dir, vr = 0.2, batch_size = 1000, epoch = 10000):
-
-        # DataSets = read_data_sets(train_dir = data_dir, validation_ratio = vr)
-        # train_data, validation_data, test_data = DataSets.train, DataSets.validation, DataSets.test
-
-        # for num_iters in range(epoch):
-
-        #     for i in range(train_data.num_examples / batch_size):
-        #         batch_data = train_data.next_batch(batch_size = batch_size)

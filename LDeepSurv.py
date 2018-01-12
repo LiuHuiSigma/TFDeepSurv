@@ -6,8 +6,8 @@ import utils
 
 
 class LDeepSurv(object):
-    def __init__(self, input_node, hidden_layers_node, output_node 
-        learning_rate = 0.001, learning_rate_decay = 0.0, 
+    def __init__(self, input_node, hidden_layers_node, output_node,
+        learning_rate = 0.001, learning_rate_decay = 1.0, 
         activation = 'relu', 
         L2_reg = 0.0, L1_reg = 0.0, optimizer = 'sgd', 
         dropout = 0.0):
@@ -52,16 +52,16 @@ class LDeepSurv(object):
             'dropout': dropout
         }
 
-    def train(X, label, num_epoch=1000):
+    def train(self, X, label, num_epoch=1000):
         """
         train DeepSurv network
         Parameters:
             X: np.array[N, m]
-            label: np.array[N, 2]
-                   E: [:, 0]
-                   T: [:, 1]
+            label: dict
+                   e: np.array[N]
+                   t: np.array[N]
         """
-        global_step = tf.Variable(0, trainabel=False)
+        global_step = tf.Variable(0, trainable=False)
         # Batch contain all train dataset
         learning_rate = tf.train.exponential_decay(
                 self.configuration['learning_rate'],
@@ -75,26 +75,26 @@ class LDeepSurv(object):
         # SGD Optimizer
         train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
         # train
-        n = label.shape[0]
+        n = label['e'].shape[0]
         with tf.Session() as sess:
-            init_op = tf.initialize_global_variables()
+            init_op = tf.global_variables_initializer()
             sess.run(init_op)
             for i in range(num_epoch):
                 _, output_y, loss_value, step = sess.run([train_step, self.y, loss, global_step],
-                                               feed_dict = {self.X: X, self.y_: label[:, 0].reshape((n, 1))})
-                if i % 20 == 0:
+                                               feed_dict = {self.X: X, self.y_: label['e'].reshape((n, 1))})
+                if i % 100 == 0:
                     print("-------------------------------------------------")
-                    print("training steps %d: loss=%g.\n", step, loss_value)
-                    print("CI on train set: %g.\n", self._Metrics_CI(label, output_y))
+                    print("training steps %d: loss=%g.\n" % (step, loss_value))
+                    print("CI on train set: %g.\n" % self._Metrics_CI(label, output_y))
 
     def get_weight_variable(self, shape, L1_reg, L2_reg):
         weights = tf.get_variable('weights', shape, 
                                   initializer=tf.truncated_normal_initializer(stddev=0.1))
         if L1_reg != 0.0:
-            tf.add_to_collection('losses', tf.contrib.layers.l1_regularizer(L1_reg))
+            tf.add_to_collection('losses', tf.contrib.layers.l1_regularizer(L1_reg)(weights))
 
         if L2_reg != 0.0:
-            tf.add_to_collection('losses', tf.contrib.layers.l2_regularizer(L2_reg))
+            tf.add_to_collection('losses', tf.contrib.layers.l2_regularizer(L2_reg)(weights))
         return weights
 
     def _negative_log_likelihood(self, y_true, y_pred):
@@ -113,9 +113,8 @@ class LDeepSurv(object):
         """
         Compute the concordance-index value.
         """
-        n = label_true.shape[0]
         hr_pred = -np.exp(y_pred)
-        ci = concordance_index(label_true[:, 1].reshape((n, 1)),
+        ci = concordance_index(label_true['t'],
                                hr_pred,
-                               label_true[:, 0].reshape((n, 1)))
+                               label_true['e'])
         return ci

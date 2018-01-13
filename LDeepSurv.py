@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 from lifelines.utils import concordance_index
-import utils
+import utils_vis
 
 
 class LDeepSurv(object):
@@ -52,7 +52,9 @@ class LDeepSurv(object):
             'dropout': dropout
         }
 
-    def train(self, X, label, num_epoch=1000):
+    def train(self, X, label, 
+              num_epoch=5000, iteration=-1, 
+              plot_train_loss=False, plot_train_CI=False):
         """
         train DeepSurv network
         Parameters:
@@ -60,6 +62,11 @@ class LDeepSurv(object):
             label: dict
                    e: np.array[N]
                    t: np.array[N]
+            num_epoch: times of iterating whole train set.
+            iteration: print information on train set every iteration train steps.
+                       default -1, keep silence.
+            plot_train_loss: plot curve of loss value during training.
+            plot_train_CI: plot curve of CI on train set during training.
         """
         global_step = tf.Variable(0, trainable=False)
         # Batch contain all train dataset
@@ -74,6 +81,9 @@ class LDeepSurv(object):
         loss = loss_fun + tf.add_n(tf.get_collection('losses'))
         # SGD Optimizer
         train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
+        # record training steps
+        loss_list = []
+        CI_list = []
         # train
         n = label['e'].shape[0]
         with tf.Session() as sess:
@@ -82,10 +92,19 @@ class LDeepSurv(object):
             for i in range(num_epoch):
                 _, output_y, loss_value, step = sess.run([train_step, self.y, loss, global_step],
                                                feed_dict = {self.X: X, self.y_: label['e'].reshape((n, 1))})
-                if i % 100 == 0:
+                # record information
+                loss_list.append(loss_value)
+                CI = self._Metrics_CI(label, output_y)
+                CI_list.append(CI)
+                if (iteration != -1) and (i % iteration == 0):
                     print("-------------------------------------------------")
-                    print("training steps %d: loss=%g.\n" % (step, loss_value))
-                    print("CI on train set: %g.\n" % self._Metrics_CI(label, output_y))
+                    print("training steps %d:\nloss = %g.\n" % (step, loss_value))
+                    print("CI = %g.\n" % CI)
+
+        if plot_train_loss:
+            utils_vis.plot_train_curve(loss_list, title="Loss(train)")
+        if plot_train_CI:
+            utils_vis.plot_train_curve(CI_list, title="CI(train)")
 
     def get_weight_variable(self, shape, L1_reg, L2_reg):
         weights = tf.get_variable('weights', shape, 

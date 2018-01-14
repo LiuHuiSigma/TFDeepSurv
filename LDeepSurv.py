@@ -8,9 +8,9 @@ import utils_vis
 class LDeepSurv(object):
     def __init__(self, input_node, hidden_layers_node, output_node,
         learning_rate = 0.001, learning_rate_decay = 1.0, 
-        activation = 'relu', 
+        activation = 'tanh', 
         L2_reg = 0.0, L1_reg = 0.0, optimizer = 'sgd', 
-        dropout = 0.0):
+        dropout_keep_prob = 1.0):
         # Data input 
         self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
         self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
@@ -25,14 +25,15 @@ class LDeepSurv(object):
                                           regularizer=reg_item)
                 biases = tf.get_variable('biases', [hidden_layers_node[i]],
                                          initializer=tf.constant_initializer(0.0))
+                layer_out = tf.nn.dropout(tf.matmul(prev_x, weights) + biases, dropout_keep_prob)
                 if activation == 'relu':
-                    layer_out = tf.nn.relu(tf.matmul(prev_x, weights) + biases)
+                    layer_out = tf.nn.relu(layer_out)
                 elif activation == 'sigmoid':
-                    layer_out = tf.nn.sigmoid(tf.matmul(prev_x, weights) + biases)
+                    layer_out = tf.nn.sigmoid(layer_out)
                 elif activation == 'tanh':
-                    layer_out = tf.nn.tanh(tf.matmul(prev_x, weights) + biases)
+                    layer_out = tf.nn.tanh(layer_out)
                 else:
-                    layer_out = tf.nn.relu(tf.matmul(prev_x, weights) + biases)
+                    layer_out = tf.nn.tanh(layer_out)
                 prev_node = hidden_layers_node[i]
                 prev_x = layer_out
         # output layers
@@ -55,8 +56,10 @@ class LDeepSurv(object):
             'L2_reg': L2_reg,
             'reg_item': reg_item,
             'optimizer': optimizer,
-            'dropout': dropout
+            'dropout': dropout_keep_prob
         }
+        # create new Session
+        self.sess = tf.Session()
 
     def train(self, X, label, 
               num_epoch=5000, iteration=-1, 
@@ -100,28 +103,47 @@ class LDeepSurv(object):
         # record training steps
         loss_list = []
         CI_list = []
-        # train
+        # train steps
         n = label['e'].shape[0]
-        with tf.Session() as sess:
-            init_op = tf.global_variables_initializer()
-            sess.run(init_op)
-            for i in range(num_epoch):
-                _, output_y, loss_value, step = sess.run([train_step, self.y, loss, global_step],
-                                               feed_dict = {self.X: X, self.y_: label['e'].reshape((n, 1))})
-                # record information
-                loss_list.append(loss_value)
-                CI = self._Metrics_CI(label, output_y)
-                CI_list.append(CI)
-                if (iteration != -1) and (i % iteration == 0):
-                    print("-------------------------------------------------")
-                    print("training steps %d:\nloss = %g.\n" % (step, loss_value))
-                    print("CI = %g.\n" % CI)
+        init_op = tf.global_variables_initializer()
+        self.sess.run(init_op)
+        for i in range(num_epoch):
+            _, output_y, loss_value, step = self.sess.run([train_step, self.y, loss, global_step],
+                                                          feed_dict = {self.X: X, self.y_: label['e'].reshape((n, 1))})
+            # record information
+            loss_list.append(loss_value)
+            CI = self._Metrics_CI(label, output_y)
+            CI_list.append(CI)
+            if (iteration != -1) and (i % iteration == 0):
+                print("-------------------------------------------------")
+                print("training steps %d:\nloss = %g.\n" % (step, loss_value))
+                print("CI = %g.\n" % CI)
 
         if plot_train_loss:
             utils_vis.plot_train_curve(loss_list, title="Loss(train)")
         if plot_train_CI:
             utils_vis.plot_train_curve(CI_list, title="CI(train)")
 
+    def predict(self, X):
+        """
+        Predict risk of X using trained network.
+        """
+        risk = self.sess.run([self.y], feed_dict = {self.X: X})
+        return np.squeeze(risk)
+
+    def eval(self, X, label):
+        """
+        Evaluate test set using CI metrics.
+        """
+        pred_risk = self.predict(X)
+        CI = self._Metrics_CI(label, pred_risk)
+        print("CI on test set = %g." % CI)
+        return CI
+
+    def close(self):
+        self.sess.close()
+        print("Current session closed!")
+    
     def _negative_log_likelihood(self, y_true, y_pred):
         """
         Callable loss function for DeepSurv network.

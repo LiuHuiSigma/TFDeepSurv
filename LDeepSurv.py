@@ -15,11 +15,14 @@ class LDeepSurv(object):
         self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
         self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
         # hidden layers
+        reg_item = tf.contrib.layers.l1_l2_regularizer(L1_reg, L2_reg)
         prev_node = input_node
         prev_x = self.X
         for i in range(len(hidden_layers_node)):
-            with tf.variable_scope('layer' + str(i+1)):
-                weights = self.get_weight_variable([prev_node, hidden_layers_node[i]], L1_reg, L2_reg)
+            with tf.variable_scope('layer' + str(i+1), reuse=tf.AUTO_REUSE):
+                weights = tf.get_variable('weights', [prev_node, hidden_layers_node[i]], 
+                                          initializer=tf.truncated_normal_initializer(stddev=0.1),
+                                          regularizer=reg_item)
                 biases = tf.get_variable('biases', [hidden_layers_node[i]],
                                          initializer=tf.constant_initializer(0.0))
                 if activation == 'relu':
@@ -33,8 +36,10 @@ class LDeepSurv(object):
                 prev_node = hidden_layers_node[i]
                 prev_x = layer_out
         # output layers
-        with tf.variable_scope('layer_last'):
-            weights = self.get_weight_variable([prev_node, output_node], L1_reg, L2_reg)
+        with tf.variable_scope('layer_last', reuse=tf.AUTO_REUSE):
+            weights = tf.get_variable('weights', [prev_node, output_node], 
+                                      initializer=tf.truncated_normal_initializer(stddev=0.1),
+                                      regularizer=reg_item)
             biases = tf.get_variable('biases', [output_node],
                                      initializer=tf.constant_initializer(0.0))
             layer_out = tf.matmul(prev_x, weights) + biases
@@ -48,6 +53,7 @@ class LDeepSurv(object):
             'activation': activation,
             'L1_reg': L1_reg,
             'L2_reg': L2_reg,
+            'reg_item': reg_item,
             'optimizer': optimizer,
             'dropout': dropout
         }
@@ -68,19 +74,29 @@ class LDeepSurv(object):
             plot_train_loss: plot curve of loss value during training.
             plot_train_CI: plot curve of CI on train set during training.
         """
-        global_step = tf.Variable(0, trainable=False)
-        # Batch contain all train dataset
-        learning_rate = tf.train.exponential_decay(
+        with tf.variable_scope('training_step', reuse=tf.AUTO_REUSE):
+            global_step = tf.get_variable("global_step", [], 
+                                          dtype=tf.int32,
+                                          initializer=tf.constant_initializer(0), 
+                                          trainable=False)
+        # loss value
+        reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        reg_term = tf.contrib.layers.apply_regularization(self.configuration['reg_item'], reg_variables)
+        loss_fun = self._negative_log_likelihood(self.y_, self.y)
+        loss = loss_fun + reg_term
+        # SGD Optimizer
+        if self.configuration['optimizer'] == 'sgd':
+            learning_rate = tf.train.exponential_decay(
                 self.configuration['learning_rate'],
                 global_step,
                 1,
-                self.configuration['learning_rate_decay']
+                self.configuration['learning_rate_decay']    
             )
-        # loss value
-        loss_fun = self._negative_log_likelihood(self.y_, self.y)
-        loss = loss_fun + tf.add_n(tf.get_collection('losses'))
-        # SGD Optimizer
-        train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
+            train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
+        elif self.configuration['optimizer'] == 'adam':
+            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).minimize(loss, global_step=global_step)            
+        else:
+            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).minimize(loss, global_step=global_step)            
         # record training steps
         loss_list = []
         CI_list = []
@@ -105,16 +121,6 @@ class LDeepSurv(object):
             utils_vis.plot_train_curve(loss_list, title="Loss(train)")
         if plot_train_CI:
             utils_vis.plot_train_curve(CI_list, title="CI(train)")
-
-    def get_weight_variable(self, shape, L1_reg, L2_reg):
-        weights = tf.get_variable('weights', shape, 
-                                  initializer=tf.truncated_normal_initializer(stddev=0.1))
-        if L1_reg != 0.0:
-            tf.add_to_collection('losses', tf.contrib.layers.l1_regularizer(L1_reg)(weights))
-
-        if L2_reg != 0.0:
-            tf.add_to_collection('losses', tf.contrib.layers.l2_regularizer(L2_reg)(weights))
-        return weights
 
     def _negative_log_likelihood(self, y_true, y_pred):
         """

@@ -2,8 +2,7 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 from lifelines.utils import concordance_index
-import utils_vis
-
+import vision
 
 class LDeepSurv(object):
     def __init__(self, input_node, hidden_layers_node, output_node,
@@ -123,11 +122,11 @@ class LDeepSurv(object):
                 print("-------------------------------------------------")
                 print("training steps %d:\nloss = %g.\n" % (step, loss_value))
                 print("CI = %g.\n" % CI)
-
+        # plot curve
         if plot_train_loss:
-            utils_vis.plot_train_curve(loss_list, title="Loss(train)")
+            vision.plot_train_curve(loss_list, title="Loss(train)")
         if plot_train_CI:
-            utils_vis.plot_train_curve(CI_list, title="CI(train)")
+            vision.plot_train_curve(CI_list, title="CI(train)")
 
     def predict(self, X):
         """

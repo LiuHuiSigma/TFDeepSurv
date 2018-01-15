@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -8,3 +9,7 @@ def plot_train_curve(L, title='Training Curve'):
 	plt.xticks([])
 	plt.title(title)
 	plt.show()
+
+def plt_surLines(T, surRates):
+    plt.plot(T, np.transpose(surRates))
+    plt.show()

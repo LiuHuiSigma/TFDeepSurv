@@ -2,14 +2,16 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 from lifelines.utils import concordance_index
-import vision
+from supersmoother import SuperSmoother
+
+import vision, utils
 
 class LDeepSurv(object):
     def __init__(self, input_node, hidden_layers_node, output_node,
-        learning_rate = 0.001, learning_rate_decay = 1.0, 
-        activation = 'tanh', 
-        L2_reg = 0.0, L1_reg = 0.0, optimizer = 'sgd', 
-        dropout_keep_prob = 1.0):
+        learning_rate=0.001, learning_rate_decay=1.0, 
+        activation='tanh', 
+        L2_reg=0.0, L1_reg=0.0, optimizer='sgd', 
+        dropout_keep_prob=1.0):
         # Data input 
         self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
         self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
@@ -67,8 +69,8 @@ class LDeepSurv(object):
         """
         train DeepSurv network
         Parameters:
-            X: np.array[N, m]
-            label: dict
+            X: np.array[N, m], must be sorted by T.
+            label: dict, must be sorted by T.
                    e: np.array[N]
                    t: np.array[N]
             num_epoch: times of iterating whole train set.
@@ -77,6 +79,9 @@ class LDeepSurv(object):
             plot_train_loss: plot curve of loss value during training.
             plot_train_CI: plot curve of CI on train set during training.
         """
+        # save data
+        X, label = utils.prepare_data(X, label)
+        self.train_data = {"X": X, "label": label}
         # global step
         with tf.variable_scope('training_step', reuse=tf.AUTO_REUSE):
             global_step = tf.get_variable("global_step", [], 
@@ -141,7 +146,6 @@ class LDeepSurv(object):
         """
         pred_risk = self.predict(X)
         CI = self._Metrics_CI(label, pred_risk)
-        print("CI on test set = %g." % CI)
         return CI
 
     def close(self):
@@ -171,6 +175,9 @@ class LDeepSurv(object):
         return ci
 
     def evaluate_var_byWeights(self):
+        """
+        evaluate feature importance by weights of NN 
+        """
         # fetch weights of network
         W = [self.sess.run(w) for w in self.nnweights]
         n_w = len(W)
@@ -186,5 +193,57 @@ class LDeepSurv(object):
         score = sumr.sum(axis=0)
         VIP = score / score.max()
         for i, v in enumerate(VIP):
-            print("feature %d score : %g." % (i, v))
+            print("%dth feature score : %g." % (i, v))
         return VIP
+
+    def survivalRate(self, X, base_X=None, base_label=None, smoothed=False):
+        """
+        Evaluate survival rate.
+        """
+        risk = self.predict(X)
+        hazard_ratio = np.exp(risk.reshape((risk.shape[0], 1)))
+        # Estimate h0(t) using data(base_X, base_label)
+        T0, H0 = self.basehaz(X=base_X, label=base_label, smoothed=smoothed)
+        HP = hazard_ratio*H0
+        SP = np.exp(-HP)
+        EL = np.sum(SP, axis= 0)    #The mean or expected value of survival life
+
+        vision.plt_surLines(T0, SP)
+
+        return T0, SP, EL
+
+    def basehaz(self, X=None, label=None, smoothed=False):
+        """
+        Kalbfleisch & Prentice Estimator.
+        Estimate base hazard function h0(t) based on data(X, label).
+        """
+        # Get data for estimating h0(t)
+        if X is None or label is None:
+            X = self.train_data['X']
+            label = self.train_data['label']
+        X, E, T, failures, atrisk, ties = utils.parse_data(X, label)
+
+        h0 = [0]
+        risk = self.predict(X)
+        hz_ratio = np.exp(risk)
+        for t in T[::-1]:
+            if t in atrisk:
+                trisk = atrisk[t]
+                s = np.sum(hz_ratio[trisk])
+                g = hz_ratio[trisk][0]
+                cj = (1-g/s)**(1/g)
+                h0.append(1-cj)
+            else:
+                h0.append(0)
+        H0 = np.cumsum(h0, axis=0)
+        T0 = np.insert(T[::-1], 0, 0, axis=0)
+
+        if smoothed:
+            # smooth the baseline hazard
+            ss = SuperSmoother()
+
+            #Check duplication points
+            ss.fit(T0, H0, dy=100)
+            H0 = ss.predict(Tx)
+
+        return T0, H0

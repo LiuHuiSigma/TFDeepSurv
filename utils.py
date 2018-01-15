@@ -2,9 +2,9 @@ import numpy as np
 import random
 import pandas as pd
 
-def prepare_data(data):
-    if isinstance(data, dict):
-       x, e, t = data['x'], data['e'], data['t']
+def prepare_data(x, label):
+    if isinstance(label, dict):
+       e, t = label['e'], label['t']
 
     # Sort Training Data for Accurate Likelihood
     sort_idx = np.argsort(t)[::-1]
@@ -12,17 +12,19 @@ def prepare_data(data):
     e = e[sort_idx]
     t = t[sort_idx]
 
-    return x, e, t
+    return x, {'e': e, 't': t}
 
-def decode_ET(data_y):
-    e, t = data_y['e'], data_y['t']
+def parse_data(x, label):
+    # sort data by t
+    x, label = prepare_data(x, label)
+    e, t = label['e'], label['t']
 
     failures = {}
     atrisk = {}
+    n, cnt = 0, 0
 
-    n, cnt, i = 0, 0, 0
-    for ei in e:
-        if ei:
+    for i in range(len(e)):
+        if e[i]:
             if t[i] not in failures:
                 failures[t[i]] = [i]
                 n += 1
@@ -34,10 +36,9 @@ def decode_ET(data_y):
             if t[i] not in atrisk:
                 atrisk[t[i]] = [i]
                 for j in range(0, i):
-                    atrisk[t[i]].append(i-j-1)
+                    atrisk[t[i]].append(j)
             else:
                 atrisk[t[i]].append(i)
-        i += 1
     # when ties occured frequently
     if cnt >= n / 2:
         ties = 'efron'
@@ -46,7 +47,7 @@ def decode_ET(data_y):
     else:
         ties = 'noties'
 
-    return ties, e, t, failures, atrisk
+    return x, e, t, failures, atrisk, ties
 
 def readData(file0, file1, discount):
     random.seed(1)

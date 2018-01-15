@@ -15,14 +15,15 @@ class LDeepSurv(object):
         self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
         self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
         # hidden layers
-        reg_item = tf.contrib.layers.l1_l2_regularizer(L1_reg, L2_reg)
+        self.nnweights = []
         prev_node = input_node
         prev_x = self.X
         for i in range(len(hidden_layers_node)):
-            with tf.variable_scope('layer' + str(i+1), reuse=tf.AUTO_REUSE):
+            layer_name = 'layer' + str(i+1)
+            with tf.variable_scope(layer_name, reuse=tf.AUTO_REUSE):
                 weights = tf.get_variable('weights', [prev_node, hidden_layers_node[i]], 
-                                          initializer=tf.truncated_normal_initializer(stddev=0.1),
-                                          regularizer=reg_item)
+                                          initializer=tf.truncated_normal_initializer(stddev=0.1))
+                self.nnweights.append(weights)
                 biases = tf.get_variable('biases', [hidden_layers_node[i]],
                                          initializer=tf.constant_initializer(0.0))
                 layer_out = tf.nn.dropout(tf.matmul(prev_x, weights) + biases, dropout_keep_prob)
@@ -37,10 +38,11 @@ class LDeepSurv(object):
                 prev_node = hidden_layers_node[i]
                 prev_x = layer_out
         # output layers
-        with tf.variable_scope('layer_last', reuse=tf.AUTO_REUSE):
+        layer_name = 'layer_last'
+        with tf.variable_scope(layer_name, reuse=tf.AUTO_REUSE):
             weights = tf.get_variable('weights', [prev_node, output_node], 
-                                      initializer=tf.truncated_normal_initializer(stddev=0.1),
-                                      regularizer=reg_item)
+                                      initializer=tf.truncated_normal_initializer(stddev=0.1))
+            self.nnweights.append(weights)
             biases = tf.get_variable('biases', [output_node],
                                      initializer=tf.constant_initializer(0.0))
             layer_out = tf.matmul(prev_x, weights) + biases
@@ -54,7 +56,6 @@ class LDeepSurv(object):
             'activation': activation,
             'L1_reg': L1_reg,
             'L2_reg': L2_reg,
-            'reg_item': reg_item,
             'optimizer': optimizer,
             'dropout': dropout_keep_prob
         }
@@ -77,14 +78,16 @@ class LDeepSurv(object):
             plot_train_loss: plot curve of loss value during training.
             plot_train_CI: plot curve of CI on train set during training.
         """
+        # global step
         with tf.variable_scope('training_step', reuse=tf.AUTO_REUSE):
             global_step = tf.get_variable("global_step", [], 
                                           dtype=tf.int32,
                                           initializer=tf.constant_initializer(0), 
                                           trainable=False)
         # loss value
-        reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-        reg_term = tf.contrib.layers.apply_regularization(self.configuration['reg_item'], reg_variables)
+        reg_item = tf.contrib.layers.l1_l2_regularizer(self.configuration['L1_reg'],
+                                                       self.configuration['L2_reg'])
+        reg_term = tf.contrib.layers.apply_regularization(reg_item, self.nnweights)
         loss_fun = self._negative_log_likelihood(self.y_, self.y)
         loss = loss_fun + reg_term
         # SGD Optimizer
@@ -97,9 +100,11 @@ class LDeepSurv(object):
             )
             train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
         elif self.configuration['optimizer'] == 'adam':
-            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).minimize(loss, global_step=global_step)            
+            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).\
+                                                           minimize(loss, global_step=global_step)            
         else:
-            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).minimize(loss, global_step=global_step)            
+            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).\
+                                                           minimize(loss, global_step=global_step)            
         # record training steps
         loss_list = []
         CI_list = []
@@ -165,3 +170,22 @@ class LDeepSurv(object):
                                hr_pred,
                                label_true['e'])
         return ci
+
+    def evaluate_var_byWeights(self):
+        # fetch weights of network
+        W = [self.sess.run(w) for w in self.nnweights]
+        n_w = len(W)
+        # matrix multiplication for all hidden layers except last output layer
+        hiddenMM = W[- 2].T
+        for i in range(n_w - 3, -1, -1):
+            hiddenMM = np.dot(hiddenMM, W[i].T)
+        # multiply last layer matrix and compute the sum of each varible for VIP
+        last_layer = W[-1]
+        s = np.dot(np.diag(last_layer[:, 0]), hiddenMM)
+
+        sumr = s / s.sum(axis=1).reshape(s.shape[0] ,1)
+        score = sumr.sum(axis=0)
+        VIP = score / score.max()
+        for i, v in enumerate(VIP):
+            print("feature %d score : %g." % (i, v))
+        return VIP

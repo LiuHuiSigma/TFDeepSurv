@@ -196,46 +196,73 @@ class LDeepSurv(object):
             print("%dth feature score : %g." % (i, v))
         return VIP
 
-    def survivalRate(self, X, base_X=None, base_label=None, smoothed=False):
+    def survivalRate(self, X, algo="wwe", base_X=None, base_label=None, smoothed=False):
         """
         Evaluate survival rate.
         """
         risk = self.predict(X)
         hazard_ratio = np.exp(risk.reshape((risk.shape[0], 1)))
-        # Estimate h0(t) using data(base_X, base_label)
-        T0, H0 = self.basehaz(X=base_X, label=base_label, smoothed=smoothed)
-        HP = hazard_ratio*H0
-        SP = np.exp(-HP)
-        EL = np.sum(SP, axis= 0)    #The mean or expected value of survival life
+        # Estimate S0(t) using data(base_X, base_label)
+        T0, S0 = self.basesurv(algo=algo, X=base_X, label=base_label, smoothed=smoothed)
+        ST = S0**(hazard_ratio)
 
-        vision.plt_surLines(T0, SP)
+        vision.plt_surLines(T0, ST)
 
-        return T0, SP, EL
+        return T0, ST
 
-    def basehaz(self, X=None, label=None, smoothed=False):
+    def basesurv(self, algo="wwe", X=None, label=None, smoothed=False):
         """
-        Kalbfleisch & Prentice Estimator.
-        Estimate base hazard function h0(t) based on data(X, label).
+        Algorithm for estimating S0:
+        (1). wwe: WWE(with ties)
+        (2). kp: Kalbfleisch & Prentice Estimator(without ties)
+        (2). bsl: breslow(with ties, but exists negative value)
+        Estimate base survival function S0(t) based on data(X, label).
         """
-        # Get data for estimating h0(t)
+        # Get data for estimating S0(t)
         if X is None or label is None:
             X = self.train_data['X']
             label = self.train_data['label']
         X, E, T, failures, atrisk, ties = utils.parse_data(X, label)
 
-        h0 = [0]
+        s0 = [1]
         risk = self.predict(X)
         hz_ratio = np.exp(risk)
-        for t in T[::-1]:
-            if t in atrisk:
-                trisk = atrisk[t]
-                s = np.sum(hz_ratio[trisk])
-                g = hz_ratio[trisk][0]
-                cj = (1-g/s)**(1/g)
-                h0.append(1-cj)
-            else:
-                h0.append(0)
-        H0 = np.cumsum(h0, axis=0)
+        if algo == 'wwe':        
+            for t in T[::-1]:
+                if t in atrisk:
+                    # R(t_i) - D_i
+                    trisk = [j for j in atrisk[t] if j not in failures[t]]
+                    dt = len(failures[t]) * 1.0
+                    s = np.sum(hz_ratio[trisk])
+                    cj = 1 - dt / (dt + s)
+                    s0.append(cj)
+                else:
+                    s0.append(1)
+        elif algo == 'kp':
+            for t in T[::-1]:
+                if t in atrisk:
+                    # R(t_i)
+                    trisk = atrisk[t]
+                    s = np.sum(hz_ratio[trisk])
+                    si = hz_ratio[failures[t][0]]
+                    cj = (1 - si / s) ** (1 / si)
+                    s0.append(cj)
+                else:
+                    s0.append(1)
+        elif algo == 'bsl':
+            for t in T[::-1]:
+                if t in atrisk:
+                    # R(t_i)
+                    trisk = atrisk[t]
+                    dt = len(failures[t]) * 1.0
+                    s = np.sum(hz_ratio[trisk])
+                    cj = 1 - dt / s
+                    s0.append(cj)
+                else:
+                    s0.append(1)
+        else:
+            pass
+        S0 = np.cumprod(s0, axis=0)
         T0 = np.insert(T[::-1], 0, 0, axis=0)
 
         if smoothed:
@@ -243,7 +270,7 @@ class LDeepSurv(object):
             ss = SuperSmoother()
 
             #Check duplication points
-            ss.fit(T0, H0, dy=100)
-            H0 = ss.predict(Tx)
+            ss.fit(T0, S0, dy=100)
+            S0 = ss.predict(T0)
 
-        return T0, H0
+        return T0, S0

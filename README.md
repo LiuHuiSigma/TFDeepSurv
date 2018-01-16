@@ -10,5 +10,6 @@ DeepSurv is a package for Deep COX Proportional risk model, published on Github,
 - The ties of death time maybe occur
 
 ### TODO-list
-- Estimate H0 when ties occurred.
-- Take ties of dead time into consideration(toughly).
+- Time of death ties, corresponding loss function.(much toughly)
+- Test simulated data and reality data.
+- try Bayesian Hyperparameters Optimize for DNN.

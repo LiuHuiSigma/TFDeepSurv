@@ -6,12 +6,18 @@ from supersmoother import SuperSmoother
 
 import vision, utils
 
-class LDeepSurv(object):
-    def __init__(self, input_node, hidden_layers_node, output_node,
+class L2DeepSurv(object):
+    def __init__(self, X, label,
+        input_node, hidden_layers_node, output_node,
         learning_rate=0.001, learning_rate_decay=1.0, 
         activation='tanh', 
         L2_reg=0.0, L1_reg=0.0, optimizer='sgd', 
         dropout_keep_prob=1.0):
+        # prepare data
+        self.train_data = {}
+        self.train_data['X'], self.train_data['E'], \
+            self.train_data['T'], self.train_data['failures'], \
+            self.train_data['atrisk'], self.train_data['ties'] = utils.parse_data(X, label)
         # Data input 
         self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
         self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
@@ -63,29 +69,21 @@ class LDeepSurv(object):
         # create new Session
         self.sess = tf.Session()
 
-    def train(self, X, label, 
-              num_epoch=5000, iteration=-1, 
+    def train(self, num_epoch=5000, iteration=-1, 
               seed = 1, 
               plot_train_loss=False, plot_train_CI=False):
         """
         train DeepSurv network
         Parameters:
-            X: np.array[N, m], must be sorted by T.
-            label: dict, must be sorted by T.
-                   e: np.array[N]
-                   t: np.array[N]
             num_epoch: times of iterating whole train set.
             iteration: print information on train set every iteration train steps.
                        default -1, keep silence.
-            seed: set Random state.
+            seed: set random state.
             plot_train_loss: plot curve of loss value during training.
             plot_train_CI: plot curve of CI on train set during training.
         """
-        # set Random state
+        # Set random state
         tf.set_random_seed(seed)
-        # save data
-        X, label = utils.prepare_data(X, label)
-        self.train_data = {"X": X, "label": label}
         # global step
         with tf.variable_scope('training_step', reuse=tf.AUTO_REUSE):
             global_step = tf.get_variable("global_step", [], 
@@ -117,14 +115,17 @@ class LDeepSurv(object):
         loss_list = []
         CI_list = []
         # train steps
-        n = label['e'].shape[0]
+        N = self.train_data['E'].shape[0]
         init_op = tf.global_variables_initializer()
         self.sess.run(init_op)
         for i in range(num_epoch):
             _, output_y, loss_value, step = self.sess.run([train_step, self.y, loss, global_step],
-                                                          feed_dict = {self.X: X, self.y_: label['e'].reshape((n, 1))})
+                                                          feed_dict = {self.X:  self.train_data['X'],
+                                                                       self.y_: self.train_data['E'].reshape((N, 1))})
             # record information
             loss_list.append(loss_value)
+            label = {'t': self.train_data['T'],
+                     'e': self.train_data['E']}
             CI = self._Metrics_CI(label, output_y)
             CI_list.append(CI)
             if (iteration != -1) and (i % iteration == 0):
@@ -160,12 +161,39 @@ class LDeepSurv(object):
         """
         Callable loss function for DeepSurv network.
         """
+        logL = 0
+        # pre-calculate cumsum
+        cumsum_y_pred = tf.cumsum(y_pred)
         hazard_ratio = tf.exp(y_pred)
-        log_risk = tf.log(tf.cumsum(hazard_ratio))
-        likelihood = y_pred - log_risk
-        # dimension for E: np.array -> [None, 1]
-        uncensored_likelihood = likelihood * y_true
-        logL = -tf.reduce_sum(uncensored_likelihood)
+        cumsum_hazard_ratio = tf.cumsum(hazard_ratio)
+        if self.train_data['ties'] == 'noties':
+            log_risk = tf.log(cumsum_hazard_ratio)
+            likelihood = y_pred - log_risk
+            # dimension for E: np.array -> [None, 1]
+            uncensored_likelihood = likelihood * y_true
+            logL = -tf.reduce_sum(uncensored_likelihood)
+        else:
+            # Loop for death times
+            for t in self.train_data['failures']:                                                                       
+                tfail = self.train_data['failures'][t]
+                trisk = self.train_data['atrisk'][t]
+                d = len(tfail)
+                dr = len(trisk)
+
+                logL += -cumsum_y_pred[tfail[-1]] + (0 if tfail[0] == 0 else cumsum_y_pred[tfail[0]-1])
+
+                if self.train_data['ties'] == 'breslow':
+                    cumsum_hazard_ratio
+                    s = cumsum_hazard_ratio[trisk[-1]]
+                    logL += tf.log(s) * d
+                elif self.train_data['ties'] == 'efron':
+                    s = cumsum_hazard_ratio[trisk[-1]]
+                    r = cumsum_hazard_ratio[tfail[-1]] - (0 if tfail[0] == 0 else cumsum_hazard_ratio[tfail[0]-1])
+                    for j in range(d):
+                        logL += tf.log(s - j * r / d)
+                else:
+                    raise NotImplementedError('tie breaking method not recognized')
+
         return logL
     
     def _Metrics_CI(self, label_true, y_pred):
@@ -225,7 +253,8 @@ class LDeepSurv(object):
         # Get data for estimating S0(t)
         if X is None or label is None:
             X = self.train_data['X']
-            label = self.train_data['label']
+            label = {'t': self.train_data['T'],
+                     'e': self.train_data['E']}
         X, E, T, failures, atrisk, ties = utils.parse_data(X, label)
 
         s0 = [1]

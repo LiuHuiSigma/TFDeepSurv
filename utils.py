@@ -34,8 +34,8 @@ def parse_data(x, label):
                 failures[t[i]].append(i)
 
             if t[i] not in atrisk:
-                atrisk[t[i]] = [i]
-                for j in range(0, i):
+                atrisk[t[i]] = []
+                for j in range(0, i+1):
                     atrisk[t[i]].append(j)
             else:
                 atrisk[t[i]].append(i)

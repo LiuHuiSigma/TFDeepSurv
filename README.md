@@ -2,14 +2,13 @@
 COX Proportional risk model implemented by tensorflow
 
 ### Some different to DeepSurv
-DeepSurv is a package for Deep COX Proportional risk model, published on Github, our works much differ in:
+DeepSurv is a package for Deep COX Proportional risk model, published on Github, our works may differ in:
 
-- The location of Batch Norm layers(X=w*x+b -> BatchNorm -> Activation, as demonstrated on paper)
-- Optimizer(Adam Optimizer or others)
-- Activation(relu or tanh or others)
-- The ties of death time maybe occur
+- Consider ties of death time, which means different loss function.
+- Estimator for survival function, three estimating algorithm provided.
+- Scientific Hyperparameters method, Bayesian Hyperparameters Optimize for neural network(in plan).
 
 ### TODO-list
-- Time of death ties, corresponding loss function.(much toughly)
+- try Bayesian Hyperparameters Optimization for DNN.
 - Test simulated data and reality data.
-- try Bayesian Hyperparameters Optimize for DNN.
+- Analyze results of experiments.

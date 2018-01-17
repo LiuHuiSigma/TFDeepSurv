@@ -13,16 +13,36 @@ class L2DeepSurv(object):
         activation='tanh', 
         L2_reg=0.0, L1_reg=0.0, optimizer='sgd', 
         dropout_keep_prob=1.0):
+        """
+        L2DeepSurv Class Constructor.
+
+        Parameters:
+            X: np.array, covariate variables.
+            label: dict, like {'e': event, 't': time}, Observation and Time in survival analyze.
+            input_node: int, number of covariate variables.
+            hidden_layers_node: list, hidden layers in network.
+            output_node: int, number of output.
+            learning_rate: float, learning rate.
+            learning_rate_decay: float, decay of learning rate.
+            activation: string, type of activation function.
+            L1_reg: float, coefficient of L1 regularizate item.
+            L2_reg: float, coefficient of L2 regularizate item.
+            optimizer: string, type of optimize algorithm.
+            dropout_keep_prob: float, probability of dropout.
+
+        Returns:
+            L2DeepSurv Class.
+        """
         # prepare data
         self.train_data = {}
         self.train_data['X'], self.train_data['E'], \
             self.train_data['T'], self.train_data['failures'], \
             self.train_data['atrisk'], self.train_data['ties'] = utils.parse_data(X, label)
-        # Data input 
+        # Data input
         self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
         self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
         # hidden layers
-        self.nnweights = []
+        self.nnweights = [] # collect weights of network
         prev_node = input_node
         prev_x = self.X
         for i in range(len(hidden_layers_node)):
@@ -31,9 +51,12 @@ class L2DeepSurv(object):
                 weights = tf.get_variable('weights', [prev_node, hidden_layers_node[i]], 
                                           initializer=tf.truncated_normal_initializer(stddev=0.1))
                 self.nnweights.append(weights)
+
                 biases = tf.get_variable('biases', [hidden_layers_node[i]],
                                          initializer=tf.constant_initializer(0.0))
+
                 layer_out = tf.nn.dropout(tf.matmul(prev_x, weights) + biases, dropout_keep_prob)
+
                 if activation == 'relu':
                     layer_out = tf.nn.relu(layer_out)
                 elif activation == 'sigmoid':
@@ -41,7 +64,8 @@ class L2DeepSurv(object):
                 elif activation == 'tanh':
                     layer_out = tf.nn.tanh(layer_out)
                 else:
-                    layer_out = tf.nn.tanh(layer_out)
+                    raise NotImplementedError('activation not recognized')
+
                 prev_node = hidden_layers_node[i]
                 prev_x = layer_out
         # output layers
@@ -50,9 +74,12 @@ class L2DeepSurv(object):
             weights = tf.get_variable('weights', [prev_node, output_node], 
                                       initializer=tf.truncated_normal_initializer(stddev=0.1))
             self.nnweights.append(weights)
+
             biases = tf.get_variable('biases', [output_node],
                                      initializer=tf.constant_initializer(0.0))
+
             layer_out = tf.matmul(prev_x, weights) + biases
+
         self.y = layer_out
         self.configuration = {
             'input_node': input_node,
@@ -66,21 +93,25 @@ class L2DeepSurv(object):
             'optimizer': optimizer,
             'dropout': dropout_keep_prob
         }
-        # create new Session
+        # create new Session for the DeepSurv Class
         self.sess = tf.Session()
 
     def train(self, num_epoch=5000, iteration=-1, 
               seed = 1, 
               plot_train_loss=False, plot_train_CI=False):
         """
-        train DeepSurv network
+        Training DeepSurv network.
+
         Parameters:
             num_epoch: times of iterating whole train set.
             iteration: print information on train set every iteration train steps.
-                       default -1, keep silence.
-            seed: set random state.
+                       default -1, means keep silence.
+            seed: random state.
             plot_train_loss: plot curve of loss value during training.
             plot_train_CI: plot curve of CI on train set during training.
+
+        Returns:
+
         """
         # Set random state
         tf.set_random_seed(seed)
@@ -109,13 +140,12 @@ class L2DeepSurv(object):
             train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).\
                                                            minimize(loss, global_step=global_step)            
         else:
-            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).\
-                                                           minimize(loss, global_step=global_step)            
+            raise NotImplementedError('activation not recognized')       
         # record training steps
         loss_list = []
         CI_list = []
-        # train steps
         N = self.train_data['E'].shape[0]
+        # train steps
         init_op = tf.global_variables_initializer()
         self.sess.run(init_op)
         for i in range(num_epoch):
@@ -128,6 +158,7 @@ class L2DeepSurv(object):
                      'e': self.train_data['E']}
             CI = self._Metrics_CI(label, output_y)
             CI_list.append(CI)
+            # print evaluation on test set
             if (iteration != -1) and (i % iteration == 0):
                 print("-------------------------------------------------")
                 print("training steps %d:\nloss = %g.\n" % (step, loss_value))
@@ -135,12 +166,19 @@ class L2DeepSurv(object):
         # plot curve
         if plot_train_loss:
             vision.plot_train_curve(loss_list, title="Loss(train)")
+
         if plot_train_CI:
             vision.plot_train_curve(CI_list, title="CI(train)")
 
     def predict(self, X):
         """
         Predict risk of X using trained network.
+
+        Parameters:
+            X: np.array, covariate variables.
+
+        Returns:
+            np.array, shape(n,), Proportional risk of X.
         """
         risk = self.sess.run([self.y], feed_dict = {self.X: X})
         return np.squeeze(risk)
@@ -148,18 +186,35 @@ class L2DeepSurv(object):
     def eval(self, X, label):
         """
         Evaluate test set using CI metrics.
+
+        Parameters:
+            X: np.array, covariate variables.
+            label: dict, like {'e': event, 't': time}, Observation and Time in survival analyze.
+
+        Returns:
+            np.array, shape(n,), Proportional risk of X.
         """
         pred_risk = self.predict(X)
         CI = self._Metrics_CI(label, pred_risk)
         return CI
 
     def close(self):
+        """
+        close session of tensorflow.
+        """
         self.sess.close()
         print("Current session closed!")
     
     def _negative_log_likelihood(self, y_true, y_pred):
         """
         Callable loss function for DeepSurv network.
+
+        Parameters:
+            y_true: tensor, observations. 
+            y_pred: tensor, output of network.
+
+        Returns:
+            loss value, means negative log likelihood.
         """
         logL = 0
         # pre-calculate cumsum
@@ -199,6 +254,13 @@ class L2DeepSurv(object):
     def _Metrics_CI(self, label_true, y_pred):
         """
         Compute the concordance-index value.
+
+        Parameters:
+            label_true: dict, like {'e': event, 't': time}, Observation and Time in survival analyze.
+            y_pred: np.array, predictive proportional risk of network.
+
+        Returns:
+            concordance index.
         """
         hr_pred = -np.exp(y_pred)
         ci = concordance_index(label_true['t'],
@@ -208,7 +270,7 @@ class L2DeepSurv(object):
 
     def evaluate_var_byWeights(self):
         """
-        evaluate feature importance by weights of NN 
+        evaluate feature importance by weights of NN.
         """
         # fetch weights of network
         W = [self.sess.run(w) for w in self.nnweights]
@@ -217,7 +279,7 @@ class L2DeepSurv(object):
         hiddenMM = W[- 2].T
         for i in range(n_w - 3, -1, -1):
             hiddenMM = np.dot(hiddenMM, W[i].T)
-        # multiply last layer matrix and compute the sum of each varible for VIP
+        # multiply last layer matrix and compute the sum of each variable for VIP
         last_layer = W[-1]
         s = np.dot(np.diag(last_layer[:, 0]), hiddenMM)
 
@@ -230,7 +292,18 @@ class L2DeepSurv(object):
 
     def survivalRate(self, X, algo="wwe", base_X=None, base_label=None, smoothed=False):
         """
-        Evaluate survival rate.
+        Estimator of survival function for data X.
+
+        Parameters:
+            X: np.array, covariate variables of patients.
+            algo: algorithm for estimating survival function.
+            base_X: X of patients for estimating survival function.
+            base_label: label of patients for estimating survival function.
+            smoothed: smooth survival function or not.
+
+        Returns:
+            T0: time points of survival function.
+            ST: survival rate of survival function.
         """
         risk = self.predict(X)
         hazard_ratio = np.exp(risk.reshape((risk.shape[0], 1)))
@@ -244,11 +317,22 @@ class L2DeepSurv(object):
 
     def basesurv(self, algo="wwe", X=None, label=None, smoothed=False):
         """
-        Algorithm for estimating S0:
-        (1). wwe: WWE(with ties)
-        (2). kp: Kalbfleisch & Prentice Estimator(without ties)
-        (2). bsl: breslow(with ties, but exists negative value)
         Estimate base survival function S0(t) based on data(X, label).
+
+        Parameters:
+            algo: algorithm for estimating survival function.
+            X: X of patients for estimating survival function.
+            label: label of patients for estimating survival function.
+            smoothed: smooth survival function or not.
+
+        Returns:
+            T0: time points of base survival function.
+            ST: survival rate of base survival function.
+        See:
+            Algorithm for estimating basel survival function:
+            (1). wwe: WWE(with ties)
+            (2). kp: Kalbfleisch & Prentice Estimator(without ties)
+            (3). bsl: breslow(with ties, but exists negative value)
         """
         # Get data for estimating S0(t)
         if X is None or label is None:
@@ -294,14 +378,14 @@ class L2DeepSurv(object):
                 else:
                     s0.append(1)
         else:
-            pass
+            raise NotImplementedError('tie breaking method not recognized')
+        # base survival function
         S0 = np.cumprod(s0, axis=0)
         T0 = np.insert(T[::-1], 0, 0, axis=0)
 
         if smoothed:
             # smooth the baseline hazard
             ss = SuperSmoother()
-
             #Check duplication points
             ss.fit(T0, S0, dy=100)
             S0 = ss.predict(T0)

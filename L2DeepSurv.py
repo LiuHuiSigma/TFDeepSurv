@@ -238,7 +238,6 @@ class L2DeepSurv(object):
                 logL += -cumsum_y_pred[tfail[-1]] + (0 if tfail[0] == 0 else cumsum_y_pred[tfail[0]-1])
 
                 if self.train_data['ties'] == 'breslow':
-                    cumsum_hazard_ratio
                     s = cumsum_hazard_ratio[trisk[-1]]
                     logL += tf.log(s) * d
                 elif self.train_data['ties'] == 'efron':

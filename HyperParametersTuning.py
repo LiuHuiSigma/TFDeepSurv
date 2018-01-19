@@ -1,26 +1,18 @@
 # coding=utf-8
-def warn(*args, **kwargs):
-    pass
-import warnings
-warnings.warn = warn
 import sys
 import time
 import json
 import pandas as pd
 import numpy as np
 import hyperopt as hpt
-from xgboost.sklearn import XGBClassifier
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import RepeatedStratifiedKFold
 
-import dataset
+from dataset import SimulatedData
 import L2DeepSurv
 
 global Logval, eval_cnt, time_start
 global train_X, train_y, NUM_features
 
-MAX_EVALS = 250
+MAX_EVALS = 100
 
 def loadSimulatedData(hr_ratio=2000, n=2000, m=10, num_var=2):
     data_config = SimulatedData(hr_ratio, num_var = num_var, num_features = m)
@@ -49,28 +41,25 @@ def loadData(feature_set_file, filename = "data//tbout_all_idfs_y5_aly.csv", tgt
     else:
         sss = StratifiedShuffleSplit(n_splits = 1, test_size = 0.2, random_state = 64)
         for train_index, test_index in sss.split(X, y):
-            print train_index, test_index
             train_X = X.loc[train_index, :]
             train_y = y.loc[train_index, :]
 
     cols = [x for x in train_X.columns if COL_TO_SET[x] == 'O']
     train_X = train_X[cols]
     train_y = train_y[tgt]
-    print "Number of rows: ", len(train_X)
-    print "X cols: ", len(train_X.columns)
-    print "X.column name:", train_X.columns
+    print("Number of rows: ", len(train_X))
+    print("X cols: ", len(train_X.columns))
+    print("X.column name:", train_X.columns)
     return train_X, train_y
 
 def argsTrans(args):
     params = {}
-    params["hidden_layer1"] = args["hidden_layer1"] + 1
-    params['hidden_layer2'] = args["hidden_layer2"] + 1
     params["learning_rate"] = args["learning_rate"] * 0.001 + 0.001
     params["learning_rate_decay"] = args["learning_rate_decay"]
     params['activation'] = args["activation"]
     params['optimizer'] = args["optimizer"]
-    params['L1_reg'] = args["optimizer"] * 0.1
-    params['L2_reg'] = args["optimizer"] * 0.1
+    params['L1_reg'] = args["L1_reg"] * 0.1
+    params['L2_reg'] = args["L2_reg"] * 0.1
     return params
 
 def estimate_time():
@@ -80,23 +69,23 @@ def estimate_time():
     th = int(total / 3600)
     tm = int((total - th * 3600) / 60)
     ts = int(total - th * 3600 - tm * 60)
-    print 'Estimate the remaining time: %dh %dm %ds' % (th, tm, ts)
+    print('Estimate the remaining time: %dh %dm %ds' % (th, tm, ts))
 
 def trainDeepSurv(args):
     global Logval, eval_cnt, time_start
     global train_X, train_y
 
     params = argsTrans(args)
-    ds = L2DeepSurv.L2DeepSurv(self, train_X, train_y,
-                                 train_X.shape[1], [params['hidden_layer1'], params['hidden_layer2']], 1,
+    ds = L2DeepSurv.L2DeepSurv(train_X, train_y,
+                                 train_X.shape[1], [7, 3], 1,
                                  learning_rate=params['learning_rate'], 
-                                 earning_rate_decay=params['earning_rate_decay'],
+                                 learning_rate_decay=params['learning_rate_decay'],
                                  activation=params['activation'],
                                  optimizer=params['optimizer'],
                                  L1_reg=params['L1_reg'], 
                                  L2_reg=params['L2_reg'], 
                                  dropout_keep_prob=1.0)
-    ds.train(num_epoch=3000)
+    ds.train(num_epoch=2500)
 
     ci = ds.eval(train_X, train_y)
     ds.close()
@@ -115,8 +104,6 @@ def wtFile(filename, var):
 def SearchParams(output_file, max_evals = 100):
     global Logval
     space = {
-              "hidden_layer1": hpt.hp.randint("hidden_layer1", NUM_features),  # [1, num] = [0, num-1] + 1
-              "hidden_layer2": hpt.hp.randint("hidden_layer2", NUM_features),  # [1, num] = [0, num-1] + 1
               "learning_rate": hpt.hp.randint("learning_rate", 10), # [0.001, 0.010] = 0.001 * ([0, 9] + 1)
               "learning_rate_decay": hpt.hp.choice("learning_rate_decay", [1.0, 0.999]),
               "activation": hpt.hp.choice("activation", ["relu", "sigmoid", "tanh"]),
@@ -128,8 +115,8 @@ def SearchParams(output_file, max_evals = 100):
     best = hpt.fmin(trainDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
     wtFile(output_file, Logval)
 
-    print "best params:", argsTrans(best)
-    print "best auc:", -trainDeepSurv(best)
+    print("best params:", argsTrans(best))
+    print("best auc:", -trainDeepSurv(best))
 
 def main(feature_set_file, 
          output_file,
@@ -147,7 +134,7 @@ def main(feature_set_file,
     Logval = []
     eval_cnt = 0
     time_start = time.clock()
-    print "Data set for SearchParams: ", len(train_X)
+    print("Data set for SearchParams: ", len(train_X))
     SearchParams(output_file = output_file, max_evals = MAX_EVALS)
 
 if __name__ == "__main__":

@@ -289,28 +289,6 @@ class L2DeepSurv(object):
             print("%dth feature score : %g." % (i, v))
         return VIP
 
-    def evaluate_var_byInputPerturbation(self):
-        X = self.train_data['X']
-        label = {'t': self.train_data['T'],
-                 'e': self.train_data['E']}
-        m = X.shape[1]
-        impt = np.zeros(m)
-
-        for i in range(m):
-            hold = np.array(X[:, i])
-            np.random.shuffle(X[:, i])
-            # metrics on train data
-            impt[i] = self.eval(X, label)
-            X[:, i] = hold
-        return impt
-
-    def evaluate_var_byOneWeight(self):
-        # Network Weight Rank 
-        w_rank = self.sess.run(self.nnweights[0]) # first layer
-        w_rank = np.sqrt(np.sum(w_rank ** 2, axis=1))
-        w_rank = w_rank / sum(w_rank)
-        return w_rank
-
     def survivalRate(self, X, algo="wwe", base_X=None, base_label=None, smoothed=False):
         """
         Estimator of survival function for data X.

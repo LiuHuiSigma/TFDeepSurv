@@ -5,24 +5,30 @@ import json
 import pandas as pd
 import numpy as np
 import hyperopt as hpt
+from sklearn.model_selection import KFold
 
 from dataset import SimulatedData
-import L2DeepSurv
+import L2DeepSurv, utils
 
 global Logval, eval_cnt, time_start
 global train_X, train_y
 global hidden_layers
 
-##### Configuration for running hyperparams tuning #####
+########## Configuration for running hyperparams tuning ##########
+# Usage: python HyperParametersTuning.py Layer1 Layer2 Layer3 ...
+
 # Don't change it easily
-SEED = 1
 OPTIMIZER_LIST = ['sgd', 'adam']
 ACTIVATION_LIST = ['relu', 'sigmoid', 'tanh']
 DECAY_LIST = [1.0, 0.999]
-# Change it Before you running
-MAX_EVALS = 130
-NUM_EPOCH = 2000
 
+# Change it Before you running
+SEED = 1
+KFOLD = 5
+MAX_EVALS = 130
+NUM_EPOCH = 2500
+
+###################################################################
 
 def loadSimulatedData(hr_ratio=2000, n=2000, m=10, num_var=2):
     data_config = SimulatedData(hr_ratio, num_var = num_var, num_features = m)
@@ -86,22 +92,37 @@ def trainDeepSurv(args):
     global Logval, eval_cnt, time_start
     global train_X, train_y
 
+    m = train_X.shape[1]
     params = argsTrans(args)
-    ds = L2DeepSurv.L2DeepSurv(train_X, train_y,
-                                 train_X.shape[1], hidden_layers, 1,
-                                 learning_rate=params['learning_rate'], 
-                                 learning_rate_decay=params['learning_rate_decay'],
-                                 activation=params['activation'],
-                                 optimizer=params['optimizer'],
-                                 L1_reg=params['L1_reg'], 
-                                 L2_reg=params['L2_reg'], 
-                                 dropout_keep_prob=1.0)
-    ds.train(num_epoch=NUM_EPOCH)
-
-    ci = ds.eval(train_X, train_y)
-    ds.close()
-
-    Logval.append({'params': params, 'ci': ci})
+    ci_list = []
+    # 5-KFold
+    kf = KFold(n_splits=KFOLD, shuffle=True, random_state=SEED)
+    for train_index, test_index in kf.split(train_X):
+        # Split Data(train : test = 4 : 1)
+        print(train_index)
+        print(test_index)
+        X_cross_train, X_cross_test = train_X[train_index], train_X[test_index]
+        y_cross_train = {'t' : train_y['t'][train_index], 'e' : train_y['e'][train_index]}
+        y_cross_test  = {'t' : train_y['t'][test_index],  'e' : train_y['e'][test_index]}
+        # Train Network
+        ds = L2DeepSurv.L2DeepSurv(X_cross_train, y_cross_train,
+                                   m, hidden_layers, 1,
+                                   learning_rate=params['learning_rate'], 
+                                   learning_rate_decay=params['learning_rate_decay'],
+                                   activation=params['activation'],
+                                   optimizer=params['optimizer'],
+                                   L1_reg=params['L1_reg'], 
+                                   L2_reg=params['L2_reg'], 
+                                   dropout_keep_prob=1.0)
+        ds.train(num_epoch=NUM_EPOCH)
+        # Evaluation Network On Test Set
+        ci = ds.eval(X_cross_test, y_cross_test)
+        ci_list.append(ci)
+        # Close Session of tensorflow
+        ds.close()
+    # Mean of CI on cross validation set
+    Logval.append({'params': params, 'ci': sum(ci_list) / KFOLD})
+    # print remaining time
     eval_cnt += 1
     if eval_cnt % 10 == 0:
         estimate_time()

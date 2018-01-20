@@ -1,2 +1,2 @@
-[{"params": {"learning_rate_decay": 0.999, "L2_reg": 0.7000000000000001, "optimizer": "adam", "L1_reg": 0.7000000000000001, "learning_rate": 0.001, "activation": "tanh"}, "ci": 0.5}, 
-{"params": {"learning_rate_decay": 0.999, "L2_reg": 0.5, "optimizer": "sgd", "L1_reg": 0.6000000000000001, "learning_rate": 0.005, "activation": "tanh"}, "ci": 0.5}]
+[{"ci": 0.5258449845993851, "params": {"learning_rate": 0.007, "activation": "tanh", "learning_rate_decay": 1.0, "optimizer": "adam", "L2_reg": 0.1, "L1_reg": 0.2}}, 
+{"ci": 0.5191131630525788, "params": {"learning_rate": 0.003, "activation": "relu", "learning_rate_decay": 1.0, "optimizer": "adam", "L2_reg": 0.2, "L1_reg": 0.2}}]

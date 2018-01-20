@@ -71,7 +71,7 @@ class SimulatedData:
         return risk
 
     def generate_data(self, N,
-        method = 'gaussian', gaussian_config = {},
+        method = 'gaussian', seed = 1, gaussian_config = {},
         **kwargs):
         """
         Generates a set of observations according to an exponentional Cox model.
@@ -91,6 +91,8 @@ class SimulatedData:
         hazards models with time-varying covariates. Statistics in medicine,
         31(29):3946-3958, 2012.
         """
+        # Set random state
+        np.random.seed(seed)
 
         # Patient Baseline information(N, m)
         data = np.random.uniform(low= -1, high= 1,

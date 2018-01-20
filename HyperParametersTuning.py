@@ -10,16 +10,23 @@ from dataset import SimulatedData
 import L2DeepSurv
 
 global Logval, eval_cnt, time_start
-global train_X, train_y, NUM_features
+global train_X, train_y
+global hidden_layers
 
-MAX_EVALS = 2
+##### Configuration for running hyperparams tuning #####
+# Don't change it easily
+SEED = 1
 OPTIMIZER_LIST = ['sgd', 'adam']
 ACTIVATION_LIST = ['relu', 'sigmoid', 'tanh']
 DECAY_LIST = [1.0, 0.999]
+# Change it Before you running
+MAX_EVALS = 130
+NUM_EPOCH = 2000
+
 
 def loadSimulatedData(hr_ratio=2000, n=2000, m=10, num_var=2):
     data_config = SimulatedData(hr_ratio, num_var = num_var, num_features = m)
-    data = data_config.generate_data(n)
+    data = data_config.generate_data(n, seed=SEED)
     data_X = data['x']
     data_y = {'e': data['e'], 't': data['t']}
     return data_X, data_y
@@ -67,6 +74,7 @@ def argsTrans(args):
 
 def estimate_time():
     global time_start, eval_cnt
+
     time_now = time.clock()
     total = (time_now - time_start) / eval_cnt * (MAX_EVALS - eval_cnt)
     th = int(total / 3600)
@@ -80,7 +88,7 @@ def trainDeepSurv(args):
 
     params = argsTrans(args)
     ds = L2DeepSurv.L2DeepSurv(train_X, train_y,
-                                 train_X.shape[1], [7, 3], 1,
+                                 train_X.shape[1], hidden_layers, 1,
                                  learning_rate=params['learning_rate'], 
                                  learning_rate_decay=params['learning_rate_decay'],
                                  activation=params['activation'],
@@ -88,7 +96,7 @@ def trainDeepSurv(args):
                                  L1_reg=params['L1_reg'], 
                                  L2_reg=params['L2_reg'], 
                                  dropout_keep_prob=1.0)
-    ds.train(num_epoch=2500)
+    ds.train(num_epoch=NUM_EPOCH)
 
     ci = ds.eval(train_X, train_y)
     ds.close()
@@ -106,6 +114,7 @@ def wtFile(filename, var):
 
 def SearchParams(output_file, max_evals = 100):
     global Logval
+
     space = {
               "learning_rate": hpt.hp.randint("learning_rate", 10), # [0.001, 0.010] = 0.001 * ([0, 9] + 1)
               "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
@@ -125,19 +134,25 @@ def main(feature_set_file,
          output_file,
          split = True,
          use_simulated_data=False):
-    global Logval, eval_cnt, time_start, SEED
-    global train_X, train_y, NUM_features
+    
+    global Logval, eval_cnt, time_start
+    global train_X, train_y
+    global hidden_layers
+
     if use_simulated_data:
         train_X, train_y = loadSimulatedData()
     else:
         train_X, train_y = loadData(feature_set_file = feature_set_file, 
                                     filename = "data//tbout_all_idfs_y5_aly_v1.csv",
                                     split = split)
-    NUM_features = len(train_X[0])
     Logval = []
+    hidden_layers = [int(idx) for idx in sys.argv[1:]]
     eval_cnt = 0
     time_start = time.clock()
+
     print("Data set for SearchParams: ", len(train_X))
+    print("Hidden Layers of Network: ", hidden_layers)
+
     SearchParams(output_file = output_file, max_evals = MAX_EVALS)
 
 if __name__ == "__main__":

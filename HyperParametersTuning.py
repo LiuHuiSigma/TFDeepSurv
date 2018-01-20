@@ -12,7 +12,10 @@ import L2DeepSurv
 global Logval, eval_cnt, time_start
 global train_X, train_y, NUM_features
 
-MAX_EVALS = 100
+MAX_EVALS = 2
+OPTIMIZER_LIST = ['sgd', 'adam']
+ACTIVATION_LIST = ['relu', 'sigmoid', 'tanh']
+DECAY_LIST = [1.0, 0.999]
 
 def loadSimulatedData(hr_ratio=2000, n=2000, m=10, num_var=2):
     data_config = SimulatedData(hr_ratio, num_var = num_var, num_features = m)
@@ -55,9 +58,9 @@ def loadData(feature_set_file, filename = "data//tbout_all_idfs_y5_aly.csv", tgt
 def argsTrans(args):
     params = {}
     params["learning_rate"] = args["learning_rate"] * 0.001 + 0.001
-    params["learning_rate_decay"] = args["learning_rate_decay"]
-    params['activation'] = args["activation"]
-    params['optimizer'] = args["optimizer"]
+    params["learning_rate_decay"] = DECAY_LIST[args["learning_rate_decay"]]
+    params['activation'] = ACTIVATION_LIST[args["activation"]]
+    params['optimizer'] = OPTIMIZER_LIST[args["optimizer"]]
     params['L1_reg'] = args["L1_reg"] * 0.1
     params['L2_reg'] = args["L2_reg"] * 0.1
     return params
@@ -105,9 +108,9 @@ def SearchParams(output_file, max_evals = 100):
     global Logval
     space = {
               "learning_rate": hpt.hp.randint("learning_rate", 10), # [0.001, 0.010] = 0.001 * ([0, 9] + 1)
-              "learning_rate_decay": hpt.hp.choice("learning_rate_decay", [1.0, 0.999]),
-              "activation": hpt.hp.choice("activation", ["relu", "sigmoid", "tanh"]),
-              "optimizer": hpt.hp.choice("optimizer", ["sgd", "adam"]),
+              "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
+              "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
+              "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
               "L1_reg": hpt.hp.randint("L1_reg", 11), # [0.0, 1.0] = 0.1 * [0, 10]
               "L2_reg": hpt.hp.randint("L2_reg", 11) # [0.0, 1.0] = 0.1 * [0, 10]
             }
@@ -116,7 +119,7 @@ def SearchParams(output_file, max_evals = 100):
     wtFile(output_file, Logval)
 
     print("best params:", argsTrans(best))
-    print("best auc:", -trainDeepSurv(best))
+    print("best metrics:", -trainDeepSurv(best))
 
 def main(feature_set_file, 
          output_file,
@@ -139,6 +142,6 @@ def main(feature_set_file,
 
 if __name__ == "__main__":
     main(feature_set_file=None, 
-         output_file="data//hyperopt_log_simulated.json",
+         output_file="data//hyperopt_log_simulated_tmp.json",
          split = False,
          use_simulated_data=True)

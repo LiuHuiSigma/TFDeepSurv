@@ -22,10 +22,10 @@ ACTIVATION_LIST = ['relu', 'sigmoid', 'tanh']
 DECAY_LIST = [1.0, 0.999]
 
 # Change it Before you running
-SEED = 1
-KFOLD = 5
-MAX_EVALS = 130
-NUM_EPOCH = 2500
+SEED = 40
+KFOLD = 4
+MAX_EVALS = 35
+NUM_EPOCH = 2200
 
 ###################################################################
 
@@ -60,8 +60,6 @@ def trainDeepSurv(args):
     kf = KFold(n_splits=KFOLD, shuffle=True, random_state=SEED)
     for train_index, test_index in kf.split(train_X):
         # Split Data(train : test = 4 : 1)
-        print(train_index)
-        print(test_index)
         X_cross_train, X_cross_test = train_X[train_index], train_X[test_index]
         y_cross_train = {'t' : train_y['t'][train_index], 'e' : train_y['e'][train_index]}
         y_cross_test  = {'t' : train_y['t'][test_index],  'e' : train_y['e'][test_index]}
@@ -123,7 +121,7 @@ def main(output_file,
     if use_simulated_data:
         train_X, train_y = utils.loadSimulatedData(seed=SEED)
     else:
-        train_X, train_y = utils.loadData(filename = "data//surv_aly_idfs.csv",
+        train_X, train_y, _, __ = utils.loadData(filename = "data//surv_aly_idfs.csv",
                                           split = split)
     Logval = []
     hidden_layers = [int(idx) for idx in sys.argv[1:]]
@@ -136,6 +134,6 @@ def main(output_file,
     SearchParams(output_file = output_file, max_evals = MAX_EVALS)
 
 if __name__ == "__main__":
-    main(output_file="data//hyperopt_log_simulated_tmp.json",
-         split = 1.0,
-         use_simulated_data=True)
+    main(output_file="data//hyperopt_log_real.json",
+         split = 0.7,
+         use_simulated_data=False)

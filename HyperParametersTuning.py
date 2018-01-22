@@ -121,8 +121,11 @@ def main(output_file,
     if use_simulated_data:
         train_X, train_y = utils.loadSimulatedData(seed=SEED)
     else:
-        train_X, train_y, _, __ = utils.loadData(filename = "data//surv_aly_idfs.csv",
-                                          split = split)
+        # load raw data
+        train_X, train_y = utils.loadRawData(filename = "data//train_idfs.csv")
+        # train_X, train_y = utils.loadData(filename = "data//train_idfs.csv",
+        #                                   split=split,
+        #                                   Normalize=False)
     Logval = []
     hidden_layers = [int(idx) for idx in sys.argv[1:]]
     eval_cnt = 0
@@ -135,5 +138,5 @@ def main(output_file,
 
 if __name__ == "__main__":
     main(output_file="data//hyperopt_log_real.json",
-         split = 0.7,
+         split = 1.0,
          use_simulated_data=False)

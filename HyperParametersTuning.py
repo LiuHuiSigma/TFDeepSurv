@@ -7,7 +7,6 @@ import numpy as np
 import hyperopt as hpt
 from sklearn.model_selection import KFold
 
-from dataset import SimulatedData
 import L2DeepSurv, utils
 
 global Logval, eval_cnt, time_start
@@ -29,44 +28,6 @@ MAX_EVALS = 130
 NUM_EPOCH = 2500
 
 ###################################################################
-
-def loadSimulatedData(hr_ratio=2000, n=2000, m=10, num_var=2):
-    data_config = SimulatedData(hr_ratio, num_var = num_var, num_features = m)
-    data = data_config.generate_data(n, seed=SEED)
-    data_X = data['x']
-    data_y = {'e': data['e'], 't': data['t']}
-    return data_X, data_y
-
-def loadData(feature_set_file, filename = "data//tbout_all_idfs_y5_aly.csv", tgt='idfs_y5', split=True):
-    # selected features
-    with open(feature_set_file, "r") as f:
-        COL_TO_SET = json.load(f)
-
-    data_all = pd.read_csv(filename)
-
-    target = ['idfs_y5']
-    ID = 'patient_id'
-    L = target + [ID]
-    x_cols = [x for x in data_all.columns if x not in L]
-
-    X = data_all[x_cols]
-    y = data_all[target]
-
-    if not split:
-        train_X, train_y = X, y
-    else:
-        sss = StratifiedShuffleSplit(n_splits = 1, test_size = 0.2, random_state = 64)
-        for train_index, test_index in sss.split(X, y):
-            train_X = X.loc[train_index, :]
-            train_y = y.loc[train_index, :]
-
-    cols = [x for x in train_X.columns if COL_TO_SET[x] == 'O']
-    train_X = train_X[cols]
-    train_y = train_y[tgt]
-    print("Number of rows: ", len(train_X))
-    print("X cols: ", len(train_X.columns))
-    print("X.column name:", train_X.columns)
-    return train_X, train_y
 
 def argsTrans(args):
     params = {}
@@ -151,9 +112,8 @@ def SearchParams(output_file, max_evals = 100):
     print("best params:", argsTrans(best))
     print("best metrics:", -trainDeepSurv(best))
 
-def main(feature_set_file, 
-         output_file,
-         split = True,
+def main(output_file,
+         split = 1.0,
          use_simulated_data=False):
     
     global Logval, eval_cnt, time_start
@@ -161,11 +121,10 @@ def main(feature_set_file,
     global hidden_layers
 
     if use_simulated_data:
-        train_X, train_y = loadSimulatedData()
+        train_X, train_y = utils.loadSimulatedData(seed=SEED)
     else:
-        train_X, train_y = loadData(feature_set_file = feature_set_file, 
-                                    filename = "data//tbout_all_idfs_y5_aly_v1.csv",
-                                    split = split)
+        train_X, train_y = utils.loadData(filename = "data//surv_aly_idfs.csv",
+                                          split = split)
     Logval = []
     hidden_layers = [int(idx) for idx in sys.argv[1:]]
     eval_cnt = 0
@@ -177,7 +136,6 @@ def main(feature_set_file,
     SearchParams(output_file = output_file, max_evals = MAX_EVALS)
 
 if __name__ == "__main__":
-    main(feature_set_file=None, 
-         output_file="data//hyperopt_log_simulated_tmp.json",
-         split = False,
+    main(output_file="data//hyperopt_log_simulated_tmp.json",
+         split = 1.0,
          use_simulated_data=True)

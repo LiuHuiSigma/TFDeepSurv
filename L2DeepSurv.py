@@ -79,6 +79,8 @@ class L2DeepSurv(object):
                                      initializer=tf.constant_initializer(0.0))
 
             layer_out = tf.matmul(prev_x, weights) + biases
+            # (0, 1)
+            layer_out = tf.nn.sigmoid(layer_out)
 
         self.y = layer_out
         self.configuration = {
@@ -208,13 +210,15 @@ class L2DeepSurv(object):
     def _negative_log_likelihood(self, y_true, y_pred):
         """
         Callable loss function for DeepSurv network.
+        the negative log-likelihood of the prediction
+        of this model under a given target distribution.
 
         Parameters:
             y_true: tensor, observations. 
             y_pred: tensor, output of network.
 
         Returns:
-            loss value, means negative log likelihood.
+            loss value, means negative log-likelihood.
         """
         logL = 0
         # pre-calculate cumsum
@@ -261,7 +265,7 @@ class L2DeepSurv(object):
         Returns:
             concordance index.
         """
-        hr_pred = -np.exp(y_pred)
+        hr_pred = -y_pred
         ci = concordance_index(label_true['t'],
                                hr_pred,
                                label_true['e'])

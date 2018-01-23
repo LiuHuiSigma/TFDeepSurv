@@ -114,7 +114,7 @@ def trainVdDeepSurv(args):
     # print remaining time
     eval_cnt += 1
     # if eval_cnt % 10 == 0:
-    print("CI on train=%g | CI on validation=%g", ci_train, ci_validation)
+    print("CI on train=%g | CI on validation=%g" % (ci_train, ci_validation))
     estimate_time()
 
     return -ci_validation
@@ -141,7 +141,7 @@ def SearchParams(output_file, max_evals = 100):
               "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
               "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
               "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 1.0), # [0.0, 1.0]
-              "L2_reg": hpt.hp.uniform('L2_reg', 0.0, 1.0)  # [0.0, 1.0]
+              "L2_reg": hpt.hp.uniform('L2_reg', 0.01, 0.03)  # [0.0, 1.0]
             }
     best = hpt.fmin(trainVdDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
     wtFile(output_file, Logval)

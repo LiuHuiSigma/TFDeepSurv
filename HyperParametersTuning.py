@@ -93,6 +93,7 @@ def trainVdDeepSurv(args):
 
     m = train_X.shape[1]
     params = argsTrans(args)
+    print("Params: ", params)
     # Train network
     ds = L2DeepSurv.L2DeepSurv(train_X, train_y,
                                m, hidden_layers, 1,
@@ -105,6 +106,7 @@ def trainVdDeepSurv(args):
                                dropout_keep_prob=1.0)
     ds.train(num_epoch=NUM_EPOCH)
     # Evaluation Network On Test Set
+    print('eval start!')
     ci_train = ds.eval(train_X, train_y)
     ci_validation = ds.eval(validation_X, validation_y)
     # Close Session of tensorflow

@@ -10,7 +10,7 @@ from sklearn.model_selection import KFold
 import L2DeepSurv, utils
 
 global Logval, eval_cnt, time_start
-global train_X, train_y
+global train_X, train_y, validation_X, validation_y
 global hidden_layers
 
 ########## Configuration for running hyperparams tuning ##########
@@ -24,7 +24,7 @@ DECAY_LIST = [1.0, 0.999]
 # Change it Before you running
 SEED = 40
 KFOLD = 4
-MAX_EVALS = 10
+MAX_EVALS = 60
 NUM_EPOCH = 2400
 
 ###################################################################
@@ -40,8 +40,6 @@ def argsTrans(args):
     return params
 
 def estimate_time():
-    global time_start, eval_cnt
-
     time_now = time.clock()
     total = (time_now - time_start) / eval_cnt * (MAX_EVALS - eval_cnt)
     th = int(total / 3600)
@@ -49,14 +47,14 @@ def estimate_time():
     ts = int(total - th * 3600 - tm * 60)
     print('Estimate the remaining time: %dh %dm %ds' % (th, tm, ts))
 
+# K-fold cross validation on neural network
 def trainDeepSurv(args):
-    global Logval, eval_cnt, time_start
-    global train_X, train_y
+    global Logval, eval_cnt
 
     m = train_X.shape[1]
     params = argsTrans(args)
     ci_list = []
-    # 5-KFold
+    # 4-KFold
     kf = KFold(n_splits=KFOLD, shuffle=True, random_state=SEED)
     for train_index, test_index in kf.split(train_X):
         # Split Data(train : test = 4 : 1)
@@ -89,6 +87,38 @@ def trainDeepSurv(args):
     
     return -ci_mean
 
+# Train and validation on neural network
+def trainVdDeepSurv(args):
+    global Logval, eval_cnt
+
+    m = train_X.shape[1]
+    params = argsTrans(args)
+    # Train network
+    ds = L2DeepSurv.L2DeepSurv(train_X, train_y,
+                               m, hidden_layers, 1,
+                               learning_rate=params['learning_rate'], 
+                               learning_rate_decay=params['learning_rate_decay'],
+                               activation=params['activation'],
+                               optimizer=params['optimizer'],
+                               L1_reg=params['L1_reg'], 
+                               L2_reg=params['L2_reg'], 
+                               dropout_keep_prob=1.0)
+    ds.train(num_epoch=NUM_EPOCH)
+    # Evaluation Network On Test Set
+    ci_train = ds.eval(train_X, train_y)
+    ci_validation = ds.eval(validation_X, validation_y)
+    # Close Session of tensorflow
+    ds.close()
+    # Mean of CI on cross validation set
+    Logval.append({'params': params, 'ci_train': ci_train, 'ci_validation': ci_validation})
+    # print remaining time
+    eval_cnt += 1
+    # if eval_cnt % 10 == 0:
+    print("CI on train=%g | CI on validation=%g", ci_train, ci_validation)
+    estimate_time()
+
+    return -ci_validation
+
 def wtFile(filename, var):
     with open(filename, 'w') as f:
         json.dump(var, f)
@@ -113,18 +143,18 @@ def SearchParams(output_file, max_evals = 100):
               "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 1.0), # [0.0, 1.0]
               "L2_reg": hpt.hp.uniform('L2_reg', 0.0, 1.0)  # [0.0, 1.0]
             }
-    best = hpt.fmin(trainDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
+    best = hpt.fmin(trainVdDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
     wtFile(output_file, Logval)
 
     print("best params:", argsTrans(best))
-    print("best metrics:", -trainDeepSurv(best))
+    print("best metrics:", -trainVdDeepSurv(best))
 
 def main(output_file,
          split = 1.0,
          use_simulated_data=False):
     
     global Logval, eval_cnt, time_start
-    global train_X, train_y
+    global train_X, train_y, validation_X, validation_y
     global hidden_layers
 
     if use_simulated_data:
@@ -132,6 +162,7 @@ def main(output_file,
     else:
         # load raw data
         train_X, train_y = utils.loadRawData(filename = "data//train_idfs.csv")
+        validation_X, validation_y = utils.loadRawData(filename = "data//validation_idfs.csv")
         # train_X, train_y = utils.loadData(filename = "data//train_idfs.csv",
         #                                   split=split,
         #                                   Normalize=False)

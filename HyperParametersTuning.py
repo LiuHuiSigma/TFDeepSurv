@@ -24,19 +24,19 @@ DECAY_LIST = [1.0, 0.999]
 # Change it Before you running
 SEED = 40
 KFOLD = 4
-MAX_EVALS = 35
-NUM_EPOCH = 2200
+MAX_EVALS = 40
+NUM_EPOCH = 2400
 
 ###################################################################
 
 def argsTrans(args):
     params = {}
-    params["learning_rate"] = args["learning_rate"] * 0.001 + 0.001
+    params["learning_rate"] = args["learning_rate"] * 0.1 + 0.1
     params["learning_rate_decay"] = DECAY_LIST[args["learning_rate_decay"]]
     params['activation'] = ACTIVATION_LIST[args["activation"]]
     params['optimizer'] = OPTIMIZER_LIST[args["optimizer"]]
-    params['L1_reg'] = args["L1_reg"] * 0.1
-    params['L2_reg'] = args["L2_reg"] * 0.1
+    params['L1_reg'] = args["L1_reg"] * 0.0001
+    params['L2_reg'] = args["L2_reg"] * 0.0001
     return params
 
 def estimate_time():
@@ -80,13 +80,14 @@ def trainDeepSurv(args):
         # Close Session of tensorflow
         ds.close()
     # Mean of CI on cross validation set
-    Logval.append({'params': params, 'ci': sum(ci_list) / KFOLD})
+    ci_mean = sum(ci_list) / KFOLD
+    Logval.append({'params': params, 'ci': ci_mean})
     # print remaining time
     eval_cnt += 1
-    if eval_cnt % 10 == 0:
-        estimate_time()
+    # if eval_cnt % 10 == 0:
+    estimate_time()
     
-    return -ci
+    return -ci_mean
 
 def wtFile(filename, var):
     with open(filename, 'w') as f:
@@ -96,12 +97,12 @@ def SearchParams(output_file, max_evals = 100):
     global Logval
 
     space = {
-              "learning_rate": hpt.hp.randint("learning_rate", 10), # [0.001, 0.010] = 0.001 * ([0, 9] + 1)
+              "learning_rate": hpt.hp.randint("learning_rate", 15), # [0.1, 1.5] = 0.1 * ([0, 14] + 1)
               "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
               "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
               "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
-              "L1_reg": hpt.hp.randint("L1_reg", 11), # [0.0, 1.0] = 0.1 * [0, 10]
-              "L2_reg": hpt.hp.randint("L2_reg", 11) # [0.0, 1.0] = 0.1 * [0, 10]
+              "L1_reg": hpt.hp.randint("L1_reg", 11), # [0.0001, 0.0010] = 0.0001 * [0, 10]
+              "L2_reg": hpt.hp.randint("L2_reg", 11)  # [0.0001, 0.0010] = 0.0001 * [0, 10]
             }
 
     best = hpt.fmin(trainDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
@@ -119,7 +120,7 @@ def main(output_file,
     global hidden_layers
 
     if use_simulated_data:
-        train_X, train_y = utils.loadSimulatedData(seed=SEED)
+        train_X, train_y = utils.loadSimulatedData()
     else:
         # load raw data
         train_X, train_y = utils.loadRawData(filename = "data//train_idfs.csv")
@@ -137,6 +138,6 @@ def main(output_file,
     SearchParams(output_file = output_file, max_evals = MAX_EVALS)
 
 if __name__ == "__main__":
-    main(output_file="data//hyperopt_log_real.json",
+    main(output_file="data//hyperopt_log_simulated_tmp.json",
          split = 1.0,
-         use_simulated_data=False)
+         use_simulated_data=True)

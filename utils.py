@@ -3,6 +3,8 @@ import random
 import pandas as pd
 from sklearn.model_selection import ShuffleSplit
 
+from dataset import SimulatedData
+
 def prepare_data(x, label):
     if isinstance(label, dict):
        e, t = label['e'], label['t']

@@ -79,8 +79,6 @@ class L2DeepSurv(object):
                                      initializer=tf.constant_initializer(0.0))
 
             layer_out = tf.matmul(prev_x, weights) + biases
-            # (0, 1)
-            layer_out = tf.nn.sigmoid(layer_out)
 
         self.y = layer_out
         self.configuration = {
@@ -210,7 +208,7 @@ class L2DeepSurv(object):
     def _negative_log_likelihood(self, y_true, y_pred):
         """
         Callable loss function for DeepSurv network.
-        the negative log-likelihood of the prediction
+        the negative average log-likelihood of the prediction
         of this model under a given target distribution.
 
         Parameters:
@@ -251,7 +249,9 @@ class L2DeepSurv(object):
                         logL += tf.log(s - j * r / d)
                 else:
                     raise NotImplementedError('tie breaking method not recognized')
-
+        # negative average log-likelihood
+        observations = tf.reduce_sum(y_true)
+        return logL / observations
         return logL
     
     def _Metrics_CI(self, label_true, y_pred):

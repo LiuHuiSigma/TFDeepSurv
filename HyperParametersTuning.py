@@ -24,19 +24,19 @@ DECAY_LIST = [1.0, 0.999]
 # Change it Before you running
 SEED = 40
 KFOLD = 4
-MAX_EVALS = 40
+MAX_EVALS = 10
 NUM_EPOCH = 2400
 
 ###################################################################
 
 def argsTrans(args):
     params = {}
-    params["learning_rate"] = args["learning_rate"] * 0.1 + 0.1
+    params["learning_rate"] = args["learning_rate"]
     params["learning_rate_decay"] = DECAY_LIST[args["learning_rate_decay"]]
     params['activation'] = ACTIVATION_LIST[args["activation"]]
     params['optimizer'] = OPTIMIZER_LIST[args["optimizer"]]
-    params['L1_reg'] = args["L1_reg"] * 0.0001
-    params['L2_reg'] = args["L2_reg"] * 0.0001
+    params['L1_reg'] = args["L1_reg"]
+    params['L2_reg'] = args["L2_reg"]
     return params
 
 def estimate_time():
@@ -95,16 +95,24 @@ def wtFile(filename, var):
 
 def SearchParams(output_file, max_evals = 100):
     global Logval
-
+    # For Simulated Data
+    # space = {
+    #           "learning_rate": hpt.hp.randint("learning_rate", 15), # [0.1, 1.5] = 0.1 * ([0, 14] + 1)
+    #           "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
+    #           "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
+    #           "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
+    #           "L1_reg": hpt.hp.randint("L1_reg", 11), # [0.0001, 0.0010] = 0.0001 * [0, 10]
+    #           "L2_reg": hpt.hp.randint("L2_reg", 11)  # [0.0001, 0.0010] = 0.0001 * [0, 10]
+    #         }
+    # For Real Data
     space = {
-              "learning_rate": hpt.hp.randint("learning_rate", 15), # [0.1, 1.5] = 0.1 * ([0, 14] + 1)
+              "learning_rate": hpt.hp.uniform('learning_rate', 0.05, 0.50), # [0.05, 0.50]
               "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
               "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
               "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
-              "L1_reg": hpt.hp.randint("L1_reg", 11), # [0.0001, 0.0010] = 0.0001 * [0, 10]
-              "L2_reg": hpt.hp.randint("L2_reg", 11)  # [0.0001, 0.0010] = 0.0001 * [0, 10]
+              "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 1.0), # [0.0, 1.0]
+              "L2_reg": hpt.hp.uniform('L2_reg', 0.0, 1.0)  # [0.0, 1.0]
             }
-
     best = hpt.fmin(trainDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
     wtFile(output_file, Logval)
 
@@ -138,6 +146,6 @@ def main(output_file,
     SearchParams(output_file = output_file, max_evals = MAX_EVALS)
 
 if __name__ == "__main__":
-    main(output_file="data//hyperopt_log_simulated_tmp.json",
+    main(output_file="data//hyperopt_log_real_tmp.json",
          split = 1.0,
-         use_simulated_data=True)
+         use_simulated_data=False)

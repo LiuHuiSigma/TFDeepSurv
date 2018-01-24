@@ -2,6 +2,7 @@
 import sys
 import time
 import json
+import gc
 import pandas as pd
 import numpy as np
 import hyperopt as hpt
@@ -21,10 +22,10 @@ OPTIMIZER_LIST = ['sgd', 'adam']
 ACTIVATION_LIST = ['relu', 'sigmoid', 'tanh']
 DECAY_LIST = [1.0, 0.999]
 
-# Change it Before you running
+# Change it Before you runninggc
 SEED = 40
 KFOLD = 4
-MAX_EVALS = 60
+MAX_EVALS = 100
 NUM_EPOCH = 2400
 
 ###################################################################
@@ -111,6 +112,8 @@ def trainVdDeepSurv(args):
     ci_validation = ds.eval(validation_X, validation_y)
     # Close Session of tensorflow
     ds.close()
+    del ds
+    # gc.collect()
     # Mean of CI on cross validation set
     Logval.append({'params': params, 'ci_train': ci_train, 'ci_validation': ci_validation})
     # print remaining time
@@ -142,7 +145,7 @@ def SearchParams(output_file, max_evals = 100):
               "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
               "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
               "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
-              "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 1.0), # [0.0, 1.0]
+              "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 0.001), # [0.0, 1.0]
               "L2_reg": hpt.hp.uniform('L2_reg', 0.01, 0.03)  # [0.0, 1.0]
             }
     best = hpt.fmin(trainVdDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)

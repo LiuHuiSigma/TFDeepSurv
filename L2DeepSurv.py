@@ -38,49 +38,88 @@ class L2DeepSurv(object):
         self.train_data['X'], self.train_data['E'], \
             self.train_data['T'], self.train_data['failures'], \
             self.train_data['atrisk'], self.train_data['ties'] = utils.parse_data(X, label)
-        # Data input
-        self.X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
-        self.y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
-        # hidden layers
-        self.nnweights = [] # collect weights of network
-        prev_node = input_node
-        prev_x = self.X
-        for i in range(len(hidden_layers_node)):
-            layer_name = 'layer' + str(i+1)
+        # New Graph 
+        G = tf.Graph()
+        with G.as_default():
+            # Data input
+            X = tf.placeholder(tf.float32, [None, input_node], name = 'x-Input')
+            y_ = tf.placeholder(tf.float32, [None, output_node], name = 'label-Input')
+            # hidden layers
+            self.nnweights = [] # collect weights of network
+            prev_node = input_node
+            prev_x = X
+            for i in range(len(hidden_layers_node)):
+                layer_name = 'layer' + str(i+1)
+                with tf.variable_scope(layer_name, reuse=tf.AUTO_REUSE):
+                    weights = tf.get_variable('weights', [prev_node, hidden_layers_node[i]], 
+                                              initializer=tf.truncated_normal_initializer(stddev=0.1))
+                    self.nnweights.append(weights)
+
+                    biases = tf.get_variable('biases', [hidden_layers_node[i]],
+                                             initializer=tf.constant_initializer(0.0))
+
+                    layer_out = tf.nn.dropout(tf.matmul(prev_x, weights) + biases, dropout_keep_prob)
+
+                    if activation == 'relu':
+                        layer_out = tf.nn.relu(layer_out)
+                    elif activation == 'sigmoid':
+                        layer_out = tf.nn.sigmoid(layer_out)
+                    elif activation == 'tanh':
+                        layer_out = tf.nn.tanh(layer_out)
+                    else:
+                        raise NotImplementedError('activation not recognized')
+
+                    prev_node = hidden_layers_node[i]
+                    prev_x = layer_out
+            # output layers
+            layer_name = 'layer_last'
             with tf.variable_scope(layer_name, reuse=tf.AUTO_REUSE):
-                weights = tf.get_variable('weights', [prev_node, hidden_layers_node[i]], 
+                weights = tf.get_variable('weights', [prev_node, output_node], 
                                           initializer=tf.truncated_normal_initializer(stddev=0.1))
                 self.nnweights.append(weights)
 
-                biases = tf.get_variable('biases', [hidden_layers_node[i]],
+                biases = tf.get_variable('biases', [output_node],
                                          initializer=tf.constant_initializer(0.0))
 
-                layer_out = tf.nn.dropout(tf.matmul(prev_x, weights) + biases, dropout_keep_prob)
-
-                if activation == 'relu':
-                    layer_out = tf.nn.relu(layer_out)
-                elif activation == 'sigmoid':
-                    layer_out = tf.nn.sigmoid(layer_out)
-                elif activation == 'tanh':
-                    layer_out = tf.nn.tanh(layer_out)
-                else:
-                    raise NotImplementedError('activation not recognized')
-
-                prev_node = hidden_layers_node[i]
-                prev_x = layer_out
-        # output layers
-        layer_name = 'layer_last'
-        with tf.variable_scope(layer_name, reuse=tf.AUTO_REUSE):
-            weights = tf.get_variable('weights', [prev_node, output_node], 
-                                      initializer=tf.truncated_normal_initializer(stddev=0.1))
-            self.nnweights.append(weights)
-
-            biases = tf.get_variable('biases', [output_node],
-                                     initializer=tf.constant_initializer(0.0))
-
-            layer_out = tf.matmul(prev_x, weights) + biases
-
-        self.y = layer_out
+                layer_out = tf.matmul(prev_x, weights) + biases
+            # Output of Network
+            y = layer_out
+            # global step
+            with tf.variable_scope('training_step', reuse=tf.AUTO_REUSE):
+                global_step = tf.get_variable("global_step", [], 
+                                              dtype=tf.int32,
+                                              initializer=tf.constant_initializer(0), 
+                                              trainable=False)
+            # loss value
+            reg_item = tf.contrib.layers.l1_l2_regularizer(L1_reg,
+                                                           L2_reg)
+            reg_term = tf.contrib.layers.apply_regularization(reg_item, self.nnweights)
+            loss_fun = self._negative_log_likelihood(y_, y)
+            loss = loss_fun + reg_term
+            # SGD Optimizer
+            if optimizer == 'sgd':
+                lr = tf.train.exponential_decay(
+                    learning_rate,
+                    global_step,
+                    1,
+                    learning_rate_decay 
+                )
+                train_step = tf.train.GradientDescentOptimizer(lr).minimize(loss, global_step=global_step)
+            elif optimizer == 'adam':
+                train_step = tf.train.GradientDescentOptimizer(learning_rate).\
+                                                               minimize(loss, global_step=global_step)     
+            else:
+                raise NotImplementedError('activation not recognized')   
+            # init op
+            init_op = tf.global_variables_initializer()
+        
+        # Save into class members
+        self.X = X
+        self.y_ = y_
+        self.y = y
+        self.global_step = global_step
+        self.loss = loss
+        self.train_step = train_step
         self.configuration = {
             'input_node': input_node,
             'hidden_layers_node': hidden_layers_node,
@@ -94,7 +133,9 @@ class L2DeepSurv(object):
             'dropout': dropout_keep_prob
         }
         # create new Session for the DeepSurv Class
-        self.sess = tf.Session()
+        self.sess = tf.Session(graph=G)
+        # initialize all global variables
+        self.sess.run(init_op)
 
     def train(self, num_epoch=5000, iteration=-1, 
               seed = 1, 
@@ -115,41 +156,13 @@ class L2DeepSurv(object):
         """
         # Set random state
         tf.set_random_seed(seed)
-        # global step
-        with tf.variable_scope('training_step', reuse=tf.AUTO_REUSE):
-            global_step = tf.get_variable("global_step", [], 
-                                          dtype=tf.int32,
-                                          initializer=tf.constant_initializer(0), 
-                                          trainable=False)
-        # loss value
-        reg_item = tf.contrib.layers.l1_l2_regularizer(self.configuration['L1_reg'],
-                                                       self.configuration['L2_reg'])
-        reg_term = tf.contrib.layers.apply_regularization(reg_item, self.nnweights)
-        loss_fun = self._negative_log_likelihood(self.y_, self.y)
-        loss = loss_fun + reg_term
-        # SGD Optimizer
-        if self.configuration['optimizer'] == 'sgd':
-            learning_rate = tf.train.exponential_decay(
-                self.configuration['learning_rate'],
-                global_step,
-                1,
-                self.configuration['learning_rate_decay']    
-            )
-            train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
-        elif self.configuration['optimizer'] == 'adam':
-            train_step = tf.train.GradientDescentOptimizer(self.configuration['learning_rate']).\
-                                                           minimize(loss, global_step=global_step)            
-        else:
-            raise NotImplementedError('activation not recognized')       
         # record training steps
         loss_list = []
         CI_list = []
         N = self.train_data['E'].shape[0]
         # train steps
-        init_op = tf.global_variables_initializer()
-        self.sess.run(init_op)
         for i in range(num_epoch):
-            _, output_y, loss_value, step = self.sess.run([train_step, self.y, loss, global_step],
+            _, output_y, loss_value, step = self.sess.run([self.train_step, self.y, self.loss, self.global_step],
                                                           feed_dict = {self.X:  self.train_data['X'],
                                                                        self.y_: self.train_data['E'].reshape((N, 1))})
             # record information

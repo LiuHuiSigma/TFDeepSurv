@@ -11,7 +11,7 @@ from sklearn.model_selection import KFold
 import L2DeepSurv, utils
 
 global Logval, eval_cnt, time_start
-global train_X, train_y, validation_X, validation_y
+global train_X, train_y
 global hidden_layers
 
 ########## Configuration for running hyperparams tuning ##########
@@ -19,25 +19,25 @@ global hidden_layers
 
 # Don't change it easily
 OPTIMIZER_LIST = ['sgd', 'adam']
-ACTIVATION_LIST = ['relu', 'sigmoid', 'tanh']
-DECAY_LIST = [1.0, 0.999]
+ACTIVATION_LIST = ['relu', 'tanh']
+DECAY_LIST = [1.0, 0.9999]
 
-# Change it Before you runninggc
+# Change it before you running
 SEED = 40
 KFOLD = 4
-MAX_EVALS = 100
+MAX_EVALS = 60
 NUM_EPOCH = 2400
-
 ###################################################################
 
 def argsTrans(args):
     params = {}
-    params["learning_rate"] = args["learning_rate"]
+    params["learning_rate"] = args["learning_rate"] * 0.01 + 0.01
     params["learning_rate_decay"] = DECAY_LIST[args["learning_rate_decay"]]
     params['activation'] = ACTIVATION_LIST[args["activation"]]
     params['optimizer'] = OPTIMIZER_LIST[args["optimizer"]]
     params['L1_reg'] = args["L1_reg"]
-    params['L2_reg'] = args["L2_reg"]
+    params['L2_reg'] = args["L2_reg"] * 0.001 + 0.01
+    params['dropout'] = args["dropout"] * 0.1 + 0.5
     return params
 
 def estimate_time():
@@ -58,7 +58,7 @@ def trainDeepSurv(args):
     # 4-KFold
     kf = KFold(n_splits=KFOLD, shuffle=True, random_state=SEED)
     for train_index, test_index in kf.split(train_X):
-        # Split Data(train : test = 4 : 1)
+        # Split Data(train : test = 3 : 1)
         X_cross_train, X_cross_test = train_X[train_index], train_X[test_index]
         y_cross_train = {'t' : train_y['t'][train_index], 'e' : train_y['e'][train_index]}
         y_cross_test  = {'t' : train_y['t'][test_index],  'e' : train_y['e'][test_index]}
@@ -71,19 +71,19 @@ def trainDeepSurv(args):
                                    optimizer=params['optimizer'],
                                    L1_reg=params['L1_reg'], 
                                    L2_reg=params['L2_reg'], 
-                                   dropout_keep_prob=1.0)
+                                   dropout_keep_prob=params['dropout'])
         ds.train(num_epoch=NUM_EPOCH)
         # Evaluation Network On Test Set
         ci = ds.eval(X_cross_test, y_cross_test)
         ci_list.append(ci)
         # Close Session of tensorflow
         ds.close()
+        del ds
     # Mean of CI on cross validation set
     ci_mean = sum(ci_list) / KFOLD
     Logval.append({'params': params, 'ci': ci_mean})
     # print remaining time
     eval_cnt += 1
-    # if eval_cnt % 10 == 0:
     estimate_time()
     
     return -ci_mean
@@ -104,7 +104,7 @@ def trainVdDeepSurv(args):
                                optimizer=params['optimizer'],
                                L1_reg=params['L1_reg'], 
                                L2_reg=params['L2_reg'], 
-                               dropout_keep_prob=1.0)
+                               dropout_keep_prob=params['dropout'])
     ds.train(num_epoch=NUM_EPOCH)
     # Evaluation Network On Test Set
     print('eval start!')
@@ -141,33 +141,32 @@ def SearchParams(output_file, max_evals = 100):
     #         }
     # For Real Data
     space = {
-              "learning_rate": hpt.hp.uniform('learning_rate', 0.05, 0.50), # [0.05, 0.50]
+              "learning_rate": hpt.hp.randint('learning_rate', 10), # [0.01, 0.10] = 0.01 * ([0, 9] + 1)
               "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
-              "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
+              "activation": hpt.hp.randint("activation", 2), # [0, 1]
               "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
-              "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 0.001), # [0.0, 1.0]
-              "L2_reg": hpt.hp.uniform('L2_reg', 0.01, 0.03)  # [0.0, 1.0]
+              "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 0.001), # [0.000, 0.001]
+              "L2_reg": hpt.hp.randint('L2_reg', 16),  # [0.010, 0.025] = 0.001 * ([0, 15] + 10)
+              "dropout": hpt.hp.randint("dropout", 6)# [0.5, 1.0] = 0.1 * ([0, 5] + 5)
             }
-    best = hpt.fmin(trainVdDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
+    best = hpt.fmin(trainDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
     wtFile(output_file, Logval)
 
     print("best params:", argsTrans(best))
-    print("best metrics:", -trainVdDeepSurv(best))
+    print("best metrics:", -trainDeepSurv(best))
 
 def main(output_file,
-         split = 1.0,
          use_simulated_data=False):
     
     global Logval, eval_cnt, time_start
-    global train_X, train_y, validation_X, validation_y
+    global train_X, train_y
     global hidden_layers
 
     if use_simulated_data:
         train_X, train_y = utils.loadSimulatedData()
     else:
         # load raw data
-        train_X, train_y = utils.loadRawData(filename = "data//train_idfs.csv")
-        validation_X, validation_y = utils.loadRawData(filename = "data//validation_idfs.csv")
+        train_X, train_y = utils.loadRawData(filename = "data//survival_analysis_idfs_train.csv")
         # train_X, train_y = utils.loadData(filename = "data//train_idfs.csv",
         #                                   split=split,
         #                                   Normalize=False)
@@ -182,6 +181,5 @@ def main(output_file,
     SearchParams(output_file = output_file, max_evals = MAX_EVALS)
 
 if __name__ == "__main__":
-    main(output_file="data//hyperopt_log_real_tmp.json",
-         split = 1.0,
+    main(output_file="data//hyperopt_log_realData.json",
          use_simulated_data=False)

@@ -104,7 +104,7 @@ def loadData(filename = "data//surv_aly_idfs.csv",
         return train_X, train_y, test_X, test_y
 
 def loadRawData(filename = "data//train_idfs.csv"):
-    # Get raw data(no header, no split, has been normalized)
+    # Get raw data(no header, no split, has been pre-processed)
     data_all = pd.read_csv(filename, header=None)
 
     num_features = len(data_all.columns)
@@ -117,7 +117,7 @@ def loadRawData(filename = "data//train_idfs.csv"):
     print("Y cols: ", len(y.columns))
     # Transform type of data to np.array
     X = X.values.astype(np.float32)
-    y = {'e': y.loc[:, (num_features-2)].values.astype(np.int32),
+    y = {'e': y.loc[:, (num_features-2)].values.astype(np.int8),
          't': y.loc[:, (num_features-1)].values.astype(np.float32)}
 
     return X, y
@@ -164,10 +164,11 @@ def readData(file, name, discount, seed=1):
         't': X_train[:,-1].astype(np.float32),
         'e': y_train.astype(np.int8)
     }
+
     test_data = {
         'x': X_test[:,:-1].astype(np.float32),
         't': X_test[:,-1].astype(np.float32),
         'e': y_test.astype(np.int8)
     }
 
-    return (train_data,test_data,names)
+    return (train_data, test_data, names)

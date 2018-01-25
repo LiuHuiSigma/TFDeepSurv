@@ -4,7 +4,7 @@ import tensorflow as tf
 from lifelines.utils import concordance_index
 from supersmoother import SuperSmoother
 
-import vision, utils
+from tfdeepsurv import vision, utils
 
 class L2DeepSurv(object):
     def __init__(self, X, label,
@@ -33,12 +33,12 @@ class L2DeepSurv(object):
         Returns:
             L2DeepSurv Class.
         """
-        # prepare data
+        # Prepare data
         self.train_data = {}
         self.train_data['X'], self.train_data['E'], \
             self.train_data['T'], self.train_data['failures'], \
             self.train_data['atrisk'], self.train_data['ties'] = utils.parse_data(X, label)
-        # New Graph 
+        # New Graph
         G = tf.Graph()
         with G.as_default():
             # Data input
@@ -84,13 +84,13 @@ class L2DeepSurv(object):
                 layer_out = tf.matmul(prev_x, weights) + biases
             # Output of Network
             y = layer_out
-            # global step
+            # Global step
             with tf.variable_scope('training_step', reuse=tf.AUTO_REUSE):
                 global_step = tf.get_variable("global_step", [], 
                                               dtype=tf.int32,
                                               initializer=tf.constant_initializer(0), 
                                               trainable=False)
-            # loss value
+            # Loss value
             reg_item = tf.contrib.layers.l1_l2_regularizer(L1_reg,
                                                            L2_reg)
             reg_term = tf.contrib.layers.apply_regularization(reg_item, self.nnweights)
@@ -102,7 +102,7 @@ class L2DeepSurv(object):
                     learning_rate,
                     global_step,
                     1,
-                    learning_rate_decay 
+                    learning_rate_decay
                 )
                 train_step = tf.train.GradientDescentOptimizer(lr).minimize(loss, global_step=global_step)
             elif optimizer == 'adam':
@@ -134,7 +134,7 @@ class L2DeepSurv(object):
         }
         # create new Session for the DeepSurv Class
         self.sess = tf.Session(graph=G)
-        # initialize all global variables
+        # Initialize all global variables
         self.sess.run(init_op)
 
     def train(self, num_epoch=5000, iteration=-1, 
@@ -156,32 +156,38 @@ class L2DeepSurv(object):
         """
         # Set random state
         tf.set_random_seed(seed)
-        # record training steps
+        # Record training steps
         loss_list = []
         CI_list = []
         N = self.train_data['E'].shape[0]
-        # train steps
+        # Train steps
         for i in range(num_epoch):
             _, output_y, loss_value, step = self.sess.run([self.train_step, self.y, self.loss, self.global_step],
                                                           feed_dict = {self.X:  self.train_data['X'],
                                                                        self.y_: self.train_data['E'].reshape((N, 1))})
-            # record information
+            # Record information
             loss_list.append(loss_value)
             label = {'t': self.train_data['T'],
                      'e': self.train_data['E']}
             CI = self._Metrics_CI(label, output_y)
             CI_list.append(CI)
-            # print evaluation on test set
+            # Print evaluation on test set
             if (iteration != -1) and (i % iteration == 0):
                 print("-------------------------------------------------")
                 print("training steps %d:\nloss = %g.\n" % (step, loss_value))
                 print("CI = %g.\n" % CI)
-        # plot curve
+        # Plot curve
         if plot_train_loss:
             vision.plot_train_curve(loss_list, title="Loss(train)")
 
         if plot_train_CI:
             vision.plot_train_curve(CI_list, title="CI(train)")
+
+    def ties_type(self):
+        """
+        return the type of ties in train data.
+        """
+        return self.train_data['ties']
 
     def predict(self, X):
         """
@@ -265,7 +271,6 @@ class L2DeepSurv(object):
         # negative average log-likelihood
         observations = tf.reduce_sum(y_true)
         return logL / observations
-        return logL
     
     def _Metrics_CI(self, label_true, y_pred):
         """

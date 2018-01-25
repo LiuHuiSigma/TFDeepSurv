@@ -8,7 +8,7 @@ import numpy as np
 import hyperopt as hpt
 from sklearn.model_selection import KFold
 
-import L2DeepSurv, utils
+from TFDeepSurv import L2DeepSurv, utils
 
 global Logval, eval_cnt, time_start
 global train_X, train_y, validation_X, validation_y
@@ -49,7 +49,7 @@ def estimate_time():
     ts = int(total - th * 3600 - tm * 60)
     print('Estimate the remaining time: %dh %dm %ds' % (th, tm, ts))
 
-# K-fold cross validation on neural network
+# K-fold cross validation on TFDeepSurv
 def trainDeepSurv(args):
     global Logval, eval_cnt
 
@@ -91,7 +91,7 @@ def trainDeepSurv(args):
     
     return -ci_mean
 
-# Train and validation on neural network
+# Train and validation on TFDeepSurv
 def trainVdDeepSurv(args):
     global Logval, eval_cnt
 
@@ -116,15 +116,13 @@ def trainVdDeepSurv(args):
     # Close Session of tensorflow
     ds.close()
     del ds
-    # gc.collect()
     # Mean of CI on cross validation set
     Logval.append({'params': params, 'ci_train': ci_train, 'ci_validation': ci_validation})
     wtFile(OUTPUT_FILE, Logval)
     # print remaining time
     eval_cnt += 1
-    # if eval_cnt % 10 == 0:
-    print(">>> CI on train=%g | CI on validation=%g" % (ci_train, ci_validation))
     estimate_time()
+    print(">>> CI on train=%g | CI on validation=%g" % (ci_train, ci_validation))
 
     return -ci_validation
 
@@ -173,9 +171,6 @@ def main(use_simulated_data=False):
             utils.loadRawData(filename="data//survival_analysis_idfs_train.csv",
                               discount=0.8,
                               seed=SEED)
-        # train_X, train_y = utils.loadData(filename = "data//train_idfs.csv",
-        #                                   split=split,
-        #                                   Normalize=False)
     Logval = []
     hidden_layers = [int(idx) for idx in sys.argv[1:]]
     eval_cnt = 0

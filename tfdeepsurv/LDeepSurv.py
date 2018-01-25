@@ -4,8 +4,9 @@ import tensorflow as tf
 from lifelines.utils import concordance_index
 from supersmoother import SuperSmoother
 
-import vision, utils
+from tfdeepsurv import vision, utils
 
+# LDeepSurv V1.0, L2DeepSurv V2.0 Suggested!
 class LDeepSurv(object):
     def __init__(self, input_node, hidden_layers_node, output_node,
         learning_rate=0.001, learning_rate_decay=1.0, 

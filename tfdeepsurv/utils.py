@@ -3,7 +3,7 @@ import random
 import pandas as pd
 from sklearn.model_selection import ShuffleSplit, train_test_split
 
-from dataset import SimulatedData
+from tfdeepsurv.dataset import SimulatedData
 
 def prepare_data(x, label):
     if isinstance(label, dict):

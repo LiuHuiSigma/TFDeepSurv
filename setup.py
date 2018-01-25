@@ -23,6 +23,7 @@ setup(name='TFDeepSurv',
         'tensorflow>=1.4.0',
         'sklearn==0.19.1',
         'lifelines>=0.9.2',
-        'supersmoother>=0.0.0'
+        'hyperopt=0.1',
+        'supersmoother>=0.4',
     ],
 )

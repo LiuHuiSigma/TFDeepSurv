@@ -2,13 +2,13 @@
 import sys
 import time
 import json
-import gc
 import pandas as pd
 import numpy as np
 import hyperopt as hpt
 from sklearn.model_selection import KFold
 
-from TFDeepSurv import L2DeepSurv, utils
+from tfdeepsurv import L2DeepSurv as LDS
+from tfdeepsurv import utils
 
 global Logval, eval_cnt, time_start
 global train_X, train_y, validation_X, validation_y
@@ -30,6 +30,7 @@ MAX_EVALS = 100
 NUM_EPOCH = 2400
 ###################################################################
 
+# Change it before you running
 def argsTrans(args):
     params = {}
     params["learning_rate"] = args["learning_rate"] * 0.01 + 0.01
@@ -110,7 +111,6 @@ def trainVdDeepSurv(args):
                                dropout_keep_prob=params['dropout'])
     ds.train(num_epoch=NUM_EPOCH)
     # Evaluation Network On Test Set
-    print('eval start!')
     ci_train = ds.eval(train_X, train_y)
     ci_validation = ds.eval(validation_X, validation_y)
     # Close Session of tensorflow
@@ -132,15 +132,6 @@ def wtFile(filename, var):
 
 def SearchParams(max_evals = 100):
     global Logval
-    # For Simulated Data
-    # space = {
-    #           "learning_rate": hpt.hp.randint("learning_rate", 15), # [0.1, 1.5] = 0.1 * ([0, 14] + 1)
-    #           "learning_rate_decay": hpt.hp.randint("learning_rate_decay", 2),# [0, 1]
-    #           "activation": hpt.hp.randint("activation", 3), # [0, 1, 2]
-    #           "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
-    #           "L1_reg": hpt.hp.randint("L1_reg", 11), # [0.0001, 0.0010] = 0.0001 * [0, 10]
-    #           "L2_reg": hpt.hp.randint("L2_reg", 11)  # [0.0001, 0.0010] = 0.0001 * [0, 10]
-    #         }
     # For Real Data
     space = {
               "learning_rate": hpt.hp.randint('learning_rate', 10), # [0.01, 0.10] = 0.01 * ([0, 9] + 1)
@@ -171,6 +162,7 @@ def main(use_simulated_data=False):
             utils.loadRawData(filename="data//survival_analysis_idfs_train.csv",
                               discount=0.8,
                               seed=SEED)
+    # assign values for global variables
     Logval = []
     hidden_layers = [int(idx) for idx in sys.argv[1:]]
     eval_cnt = 0
@@ -178,7 +170,7 @@ def main(use_simulated_data=False):
 
     print("Data set for SearchParams: ", len(train_X))
     print("Hidden Layers of Network: ", hidden_layers)
-
+    # start searching params
     SearchParams(max_evals = MAX_EVALS)
 
 if __name__ == "__main__":

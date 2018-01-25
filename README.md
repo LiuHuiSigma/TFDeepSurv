@@ -17,7 +17,7 @@ research of Breast Cancer, we will update status here once paper published !
 ### From source
 
 Download TFDeepSurv package and install from the directory (Python version : 3):
-```
+```bash
 git clone https://github.com/liupei101/TFDeepSurv.git
 cd TFDeepSurv
 pip install .
@@ -26,7 +26,7 @@ pip install .
 ## Usage:
 
 #### import packages and prepare data:
-```
+```python
 # import package
 from tfdeepsurv import L2DeepSurv as LDS
 from tfdeepsurv.dataset import SimulatedData
@@ -39,7 +39,7 @@ test_data = data_config.generate_data(800)
 ```
 
 #### Initialize a neural network: you can set some hyperparameters
-```
+```python
 input_nodes = 10
 output_nodes = 1
 train_X = train_data['x']
@@ -59,7 +59,7 @@ print(model.ties_type())
 ```
 
 #### train network:
-```
+```python
 # Plot curve of loss and CI on train data
 model.train(num_epoch=2500, iteration=100,
             plot_train_loss=True, plot_train_CI=True)
@@ -96,12 +96,13 @@ loss = 6.29985.
 CI = 0.818038.
 ```
 Curve of loss and CI:
-![Loss Value](https://github.com/liupei101/TFDeepSurv/tree/master/notebook/pics/index.png)
+Loss Value                       | CI
+:-------------------------------:|:--------------------------------------:
+![](notebook/pics/index.png)|![](notebook/pics/index1.png)
 
-![CI](https://github.com/liupei101/TFDeepSurv/tree/master/notebook/pics/index1.png)
 
 #### evaluate model on data of train and test :
-```
+```python
 test_X = test_data['x']
 test_y = {'e': test_data['e'], 't': test_data['t']}
 print("CI on train set: %g" % model.eval(train_X, train_y))
@@ -114,7 +115,7 @@ CI on train set: 0.817987
 ```
 
 #### evaluate importance of features by weights of neural network
-```
+```python
 model.evaluate_var_byWeights()
 ```
 result:
@@ -132,14 +133,14 @@ result:
 ```
 
 #### estimate survival function of patients and plot it
-```
+```python
 # algo: 'wwe', 'bls' or 'kp', the algorithm for estimating survival function
 model.survivalRate(test_X[0:3], algo="wwe")
 ```
 result:
-![Survival rate](https://github.com/liupei101/TFDeepSurv/tree/master/notebook/pics/index2.png)
+![Survival rate](notebook/pics/index2.png)
 
 ## More properties
 Scientific Hyperparameters tuning method, Bayesian Hyperparameters Optimization for neural network, which is convenient and automated for tuning hyperparameters in neural network.
 
-For more usage of Bayesian Hyperparameters Optimization, you can see [here]()
+For more usage of Bayesian Hyperparameters Optimization, you can see [here](BayesianHyperparamOptimization/README.md)

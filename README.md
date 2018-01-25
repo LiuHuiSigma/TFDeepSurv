@@ -96,10 +96,10 @@ loss = 6.29985.
 CI = 0.818038.
 ```
 Curve of loss and CI:
+
 Loss Value                       | CI
 :-------------------------------:|:--------------------------------------:
 ![](notebook/pics/index.png)|![](notebook/pics/index1.png)
-
 
 #### evaluate model on data of train and test :
 ```python
@@ -137,7 +137,9 @@ result:
 # algo: 'wwe', 'bls' or 'kp', the algorithm for estimating survival function
 model.survivalRate(test_X[0:3], algo="wwe")
 ```
+
 result:
+
 ![Survival rate](notebook/pics/index2.png)
 
 ## More properties

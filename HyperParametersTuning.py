@@ -11,7 +11,7 @@ from sklearn.model_selection import KFold
 import L2DeepSurv, utils
 
 global Logval, eval_cnt, time_start
-global train_X, train_y
+global train_X, train_y, validation_X, validation_y
 global hidden_layers
 
 ########## Configuration for running hyperparams tuning ##########
@@ -23,9 +23,10 @@ ACTIVATION_LIST = ['relu', 'tanh']
 DECAY_LIST = [1.0, 0.9999]
 
 # Change it before you running
+OUTPUT_FILE="data//hyperopt_log_realData.json"
 SEED = 40
 KFOLD = 4
-MAX_EVALS = 60
+MAX_EVALS = 100
 NUM_EPOCH = 2400
 ###################################################################
 
@@ -36,8 +37,8 @@ def argsTrans(args):
     params['activation'] = ACTIVATION_LIST[args["activation"]]
     params['optimizer'] = OPTIMIZER_LIST[args["optimizer"]]
     params['L1_reg'] = args["L1_reg"]
-    params['L2_reg'] = args["L2_reg"] * 0.001 + 0.01
-    params['dropout'] = args["dropout"] * 0.1 + 0.5
+    params['L2_reg'] = args["L2_reg"] * 0.001 + 0.005
+    params['dropout'] = args["dropout"] * 0.1 + 0.6
     return params
 
 def estimate_time():
@@ -82,6 +83,8 @@ def trainDeepSurv(args):
     # Mean of CI on cross validation set
     ci_mean = sum(ci_list) / KFOLD
     Logval.append({'params': params, 'ci': ci_mean})
+    print("Params :", params)
+    print(">>> CI :", ci_mean)
     # print remaining time
     eval_cnt += 1
     estimate_time()
@@ -116,10 +119,11 @@ def trainVdDeepSurv(args):
     # gc.collect()
     # Mean of CI on cross validation set
     Logval.append({'params': params, 'ci_train': ci_train, 'ci_validation': ci_validation})
+    wtFile(OUTPUT_FILE, Logval)
     # print remaining time
     eval_cnt += 1
     # if eval_cnt % 10 == 0:
-    print("CI on train=%g | CI on validation=%g" % (ci_train, ci_validation))
+    print(">>> CI on train=%g | CI on validation=%g" % (ci_train, ci_validation))
     estimate_time()
 
     return -ci_validation
@@ -128,7 +132,7 @@ def wtFile(filename, var):
     with open(filename, 'w') as f:
         json.dump(var, f)
 
-def SearchParams(output_file, max_evals = 100):
+def SearchParams(max_evals = 100):
     global Logval
     # For Simulated Data
     # space = {
@@ -146,27 +150,29 @@ def SearchParams(output_file, max_evals = 100):
               "activation": hpt.hp.randint("activation", 2), # [0, 1]
               "optimizer": hpt.hp.randint("optimizer", 2), # [0, 1]
               "L1_reg": hpt.hp.uniform('L1_reg', 0.0, 0.001), # [0.000, 0.001]
-              "L2_reg": hpt.hp.randint('L2_reg', 16),  # [0.010, 0.025] = 0.001 * ([0, 15] + 10)
-              "dropout": hpt.hp.randint("dropout", 6)# [0.5, 1.0] = 0.1 * ([0, 5] + 5)
+              "L2_reg": hpt.hp.randint('L2_reg', 16),  # [0.005, 0.020] = 0.001 * ([0, 15] + 5)
+              "dropout": hpt.hp.randint("dropout", 5)# [0.6, 1.0] = 0.1 * ([0, 4] + 6)
             }
-    best = hpt.fmin(trainDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
-    wtFile(output_file, Logval)
+    best = hpt.fmin(trainVdDeepSurv, space, algo = hpt.tpe.suggest, max_evals = max_evals)
+    wtFile(OUTPUT_FILE, Logval)
 
     print("best params:", argsTrans(best))
-    print("best metrics:", -trainDeepSurv(best))
+    print("best metrics:", -trainVdDeepSurv(best))
 
-def main(output_file,
-         use_simulated_data=False):
+def main(use_simulated_data=False):
     
     global Logval, eval_cnt, time_start
-    global train_X, train_y
+    global train_X, train_y, validation_X, validation_y
     global hidden_layers
 
     if use_simulated_data:
         train_X, train_y = utils.loadSimulatedData()
     else:
         # load raw data
-        train_X, train_y = utils.loadRawData(filename = "data//survival_analysis_idfs_train.csv")
+        train_X, train_y, validation_X, validation_y = \
+            utils.loadRawData(filename="data//survival_analysis_idfs_train.csv",
+                              discount=0.8,
+                              seed=SEED)
         # train_X, train_y = utils.loadData(filename = "data//train_idfs.csv",
         #                                   split=split,
         #                                   Normalize=False)
@@ -178,8 +184,7 @@ def main(output_file,
     print("Data set for SearchParams: ", len(train_X))
     print("Hidden Layers of Network: ", hidden_layers)
 
-    SearchParams(output_file = output_file, max_evals = MAX_EVALS)
+    SearchParams(max_evals = MAX_EVALS)
 
 if __name__ == "__main__":
-    main(output_file="data//hyperopt_log_realData.json",
-         use_simulated_data=False)
+    main(use_simulated_data=False)

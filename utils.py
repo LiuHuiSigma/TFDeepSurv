@@ -92,35 +92,50 @@ def loadData(filename = "data//surv_aly_idfs.csv",
     print("X.column name:", train_X.columns)
     print("Y.column name:", train_y.columns)
     # Transform type of data to np.array
-    train_X = train_X.values.astype(np.float32)
-    train_y = {'e': train_y[tgt['e']].values.astype(np.int32),
-               't': train_y[tgt['t']].values.astype(np.float32)}
+    train_X = train_X.values
+    train_y = {'e': train_y[tgt['e']].values,
+               't': train_y[tgt['t']].values}
     if split == 1.0:
         return train_X, train_y
     else:
-        test_X = test_X.values.astype(np.float32)
-        test_y = {'e': test_y[tgt['e']].values.astype(np.int32),
-                  't': test_y[tgt['t']].values.astype(np.float32)}
+        test_X = test_X.values
+        test_y = {'e': test_y[tgt['e']].values,
+                  't': test_y[tgt['t']].values}
         return train_X, train_y, test_X, test_y
 
-def loadRawData(filename = "data//train_idfs.csv"):
+def loadRawData(filename = "data//train_idfs.csv", 
+                discount=None,
+                seed=1):
     # Get raw data(no header, no split, has been pre-processed)
     data_all = pd.read_csv(filename, header=None)
-
     num_features = len(data_all.columns)
-
     X = data_all.loc[:, 0:(num_features-3)]
     y = data_all.loc[:, (num_features-2):]
-    # print information about data
-    print("Number of rows: ", len(X))
-    print("X cols: ", len(X.columns))
-    print("Y cols: ", len(y.columns))
+    # split data
+    if discount is None or discount == 1.0:
+        train_X, train_y = X, y
+    else:
+        sss = ShuffleSplit(n_splits=1, test_size=1-discount, random_state=seed)
+        for train_index, test_index in sss.split(X, y):
+            train_X, test_X = X.loc[train_index, :], X.loc[test_index, :]
+            train_y, test_y = y.loc[train_index, :], y.loc[test_index, :]
+    # print information about train data
+    print("Shape of train_X: ", len(train_X.index), len(train_X.columns))
+    print("Shape of train_y: ", len(train_y.index), len(train_y.columns))
     # Transform type of data to np.array
-    X = X.values.astype(np.float32)
-    y = {'e': y.loc[:, (num_features-2)].values.astype(np.int8),
-         't': y.loc[:, (num_features-1)].values.astype(np.float32)}
-
-    return X, y
+    train_X = train_X.values
+    train_y = {'e': train_y.iloc[:, 0].values,
+               't': train_y.iloc[:, 1].values}
+    if discount is None or discount == 1.0:
+        return train_X, train_y
+    else:
+        # print information about test data
+        print("Shape of test_X: ", len(test_X.index), len(test_X.columns))
+        print("Shape of test_y: ", len(test_y.index), len(test_y.columns))
+        test_X = test_X.values
+        test_y = {'e': test_y.iloc[:, 0].values,
+                  't': test_y.iloc[:, 1].values}
+        return train_X, train_y, test_X, test_y
 
 def readData(file, name, discount, seed=1):
     random.seed(seed)
@@ -160,15 +175,15 @@ def readData(file, name, discount, seed=1):
     X_train, X_test, y_train, y_test = train_test_split(sampleM, classM, train_size=discount,random_state=1,stratify=classM)
 
     train_data = {
-        'x': X_train[:,:-1].astype(np.float32),
-        't': X_train[:,-1].astype(np.float32),
-        'e': y_train.astype(np.int8)
+        'x': X_train[:,:-1],
+        't': np.around(X_train[:,-1], decimals=2),
+        'e': y_train
     }
 
     test_data = {
-        'x': X_test[:,:-1].astype(np.float32),
-        't': X_test[:,-1].astype(np.float32),
-        'e': y_test.astype(np.int8)
+        'x': X_test[:,:-1],
+        't': np.around(X_test[:,-1], decimals=2),
+        'e': y_test
     }
 
     return (train_data, test_data, names)

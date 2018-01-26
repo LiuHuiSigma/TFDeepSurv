@@ -23,10 +23,10 @@ ACTIVATION_LIST = ['relu', 'tanh']
 DECAY_LIST = [1.0, 0.9999]
 
 # Change it before you running
-OUTPUT_FILE="data//hyperopt_log_realData.json"
+OUTPUT_FILE="data//hyperopt_log_realData_V2.json"
 SEED = 40
 KFOLD = 4
-MAX_EVALS = 100
+MAX_EVALS = 50
 NUM_EPOCH = 2400
 ###################################################################
 
@@ -65,15 +65,15 @@ def trainDeepSurv(args):
         y_cross_train = {'t' : train_y['t'][train_index], 'e' : train_y['e'][train_index]}
         y_cross_test  = {'t' : train_y['t'][test_index],  'e' : train_y['e'][test_index]}
         # Train Network
-        ds = L2DeepSurv.L2DeepSurv(X_cross_train, y_cross_train,
-                                   m, hidden_layers, 1,
-                                   learning_rate=params['learning_rate'], 
-                                   learning_rate_decay=params['learning_rate_decay'],
-                                   activation=params['activation'],
-                                   optimizer=params['optimizer'],
-                                   L1_reg=params['L1_reg'], 
-                                   L2_reg=params['L2_reg'], 
-                                   dropout_keep_prob=params['dropout'])
+        ds = LDS.L2DeepSurv(X_cross_train, y_cross_train,
+                            m, hidden_layers, 1,
+                            learning_rate=params['learning_rate'], 
+                            learning_rate_decay=params['learning_rate_decay'],
+                            activation=params['activation'],
+                            optimizer=params['optimizer'],
+                            L1_reg=params['L1_reg'], 
+                            L2_reg=params['L2_reg'], 
+                            dropout_keep_prob=params['dropout'])
         ds.train(num_epoch=NUM_EPOCH)
         # Evaluation Network On Test Set
         ci = ds.eval(X_cross_test, y_cross_test)
@@ -100,15 +100,15 @@ def trainVdDeepSurv(args):
     params = argsTrans(args)
     print("Params: ", params)
     # Train network
-    ds = L2DeepSurv.L2DeepSurv(train_X, train_y,
-                               m, hidden_layers, 1,
-                               learning_rate=params['learning_rate'], 
-                               learning_rate_decay=params['learning_rate_decay'],
-                               activation=params['activation'],
-                               optimizer=params['optimizer'],
-                               L1_reg=params['L1_reg'], 
-                               L2_reg=params['L2_reg'], 
-                               dropout_keep_prob=params['dropout'])
+    ds = LDS.L2DeepSurv(train_X, train_y,
+                        m, hidden_layers, 1,
+                        learning_rate=params['learning_rate'], 
+                        learning_rate_decay=params['learning_rate_decay'],
+                        activation=params['activation'],
+                        optimizer=params['optimizer'],
+                        L1_reg=params['L1_reg'], 
+                        L2_reg=params['L2_reg'], 
+                        dropout_keep_prob=params['dropout'])
     ds.train(num_epoch=NUM_EPOCH)
     # Evaluation Network On Test Set
     ci_train = ds.eval(train_X, train_y)

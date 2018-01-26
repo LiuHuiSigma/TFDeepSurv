@@ -111,7 +111,7 @@ print("CI on test set: %g" % model.eval(test_X, test_y))
 result :
 ```
 CI on train set: 0.819224
-CI on train set: 0.817987
+CI on test set: 0.817987
 ```
 
 #### evaluate importance of features by weights of neural network

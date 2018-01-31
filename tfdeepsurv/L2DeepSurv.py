@@ -12,7 +12,8 @@ class L2DeepSurv(object):
         learning_rate=0.001, learning_rate_decay=1.0, 
         activation='tanh', 
         L2_reg=0.0, L1_reg=0.0, optimizer='sgd', 
-        dropout_keep_prob=1.0):
+        dropout_keep_prob=1.0,
+        seed=1):
         """
         L2DeepSurv Class Constructor.
 
@@ -29,7 +30,7 @@ class L2DeepSurv(object):
             L2_reg: float, coefficient of L2 regularizate item.
             optimizer: string, type of optimize algorithm.
             dropout_keep_prob: float, probability of dropout.
-
+            seed: set random state.
         Returns:
             L2DeepSurv Class.
         """
@@ -132,13 +133,14 @@ class L2DeepSurv(object):
             'optimizer': optimizer,
             'dropout': dropout_keep_prob
         }
+        # Set random state
+        tf.set_random_seed(seed)
         # create new Session for the DeepSurv Class
         self.sess = tf.Session(graph=G)
         # Initialize all global variables
         self.sess.run(init_op)
 
     def train(self, num_epoch=5000, iteration=-1, 
-              seed = 1, 
               plot_train_loss=False, plot_train_CI=False):
         """
         Training DeepSurv network.
@@ -147,15 +149,12 @@ class L2DeepSurv(object):
             num_epoch: times of iterating whole train set.
             iteration: print information on train set every iteration train steps.
                        default -1, means keep silence.
-            seed: random state.
             plot_train_loss: plot curve of loss value during training.
             plot_train_CI: plot curve of CI on train set during training.
 
         Returns:
 
         """
-        # Set random state
-        tf.set_random_seed(seed)
         # Record training steps
         loss_list = []
         CI_list = []
